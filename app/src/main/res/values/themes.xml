@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Claymorphism base: warm ivory window background, no action bar.
+         The actual UI is drawn entirely by Jetpack Compose. -->
+    <style name="Theme.IrlRpg" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/clay_warm_ivory</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

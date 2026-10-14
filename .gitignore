@@ -1,35 +1,34 @@
-# Gradle files
+# --- Gradle -------------------------------------------------------------------
 .gradle/
 build/
-.kotlin/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle-wrapper.jar
 
-# Local configuration file (sdk path, etc)
+# --- Android SDK / IDE --------------------------------------------------------
 local.properties
-
-# Log/OS Files
-*.log
-
-# Android Studio generated files and folders
+.cxx/
+*.apk
+*.aar
+# ...but the ready-to-install Step 1 build is committed on purpose
+!prebuilt/app-debug.apk
+*.ap_
+*.aab
+*.dex
 captures/
 .externalNativeBuild/
-.cxx/
-*.aab
-*.apk
-output-metadata.json
-
-# IntelliJ
-*.iml
 .idea/
-misc.xml
-deploymentTargetDropDown.xml
-render.experimental.xml
+*.iml
+*.hprof
 
-# Keystore files
+# --- Files for signing --------------------------------------------------------
 *.jks
 *.keystore
+keystore.properties
 
-# Google Services (e.g. APIs or Firebase)
-google-services.json
+# --- Kotlin -------------------------------------------------------------------
+.kotlin/
 
-# Android Profiling
-*.hprof
+# --- OS / misc ----------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.log
