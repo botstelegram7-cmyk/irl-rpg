@@ -1,6 +1,6 @@
 # Prebuilt APK
 
-`app-debug.apk` is a ready-to-install build of **IRL RPG — Step 1**, produced from the source in
+`app-debug.apk` is a ready-to-install build of **IRL RPG — Step 3 (UI polish)**, produced from the source in
 this repository with:
 
 ```bash
@@ -15,6 +15,19 @@ this repository with:
 3. Tap the APK and install, then open **IRL RPG**.
 
 Requires **Android 7.0 (API 24)** or newer.
+
+## Verified build (Step 3)
+
+| | |
+| --- | --- |
+| File | `app-debug.apk` |
+| Size | 11,135,149 bytes |
+| SHA-256 | `97d1c94bf7c96bc80d049b2f20615e21af44260f877525e3053b48fdac255d51` |
+| Source | commit for Step 3 on `main` |
+| Release | https://github.com/botstelegram7-cmyk/irl-rpg/releases/tag/v1.0-step3 |
+
+A release-mode (unsigned) APK is attached to the same GitHub release for anyone who wants to sign it
+with their own key.
 
 ## Notes
 

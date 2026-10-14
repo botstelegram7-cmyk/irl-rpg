@@ -11,9 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,24 +28,38 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.irlrpg.app.core.DateX
+import com.irlrpg.app.domain.model.AnalyticsRange
 import com.irlrpg.app.domain.model.AnalyticsState
 import com.irlrpg.app.domain.model.CategoryBreakdown
+import com.irlrpg.app.domain.model.RangeSummary
 import com.irlrpg.app.ui.design.ClayBar
 import com.irlrpg.app.ui.design.ClayBarChart
+import com.irlrpg.app.ui.design.ClayButton
 import com.irlrpg.app.ui.design.ClayCard
-import com.irlrpg.app.ui.design.ClayEmptyState
-import com.irlrpg.app.ui.design.ClayIconTile
+import com.irlrpg.app.ui.design.ClayDivider
+import com.irlrpg.app.ui.design.ClayIconPill
+import com.irlrpg.app.ui.design.ClayMiniStat
+import com.irlrpg.app.ui.design.ClayPanel
 import com.irlrpg.app.ui.design.ClayProgressBar
 import com.irlrpg.app.ui.design.ClayScaffold
-import com.irlrpg.app.ui.design.ClaySectionHeader
 import com.irlrpg.app.ui.design.ClaySegmentedControl
-import com.irlrpg.app.ui.design.ClayStatTile
+import com.irlrpg.app.ui.design.ClaySectionTitle
 import com.irlrpg.app.ui.design.ClayTopBar
 import com.irlrpg.app.ui.theme.ClayInk
 import com.irlrpg.app.ui.theme.ClayPalette
 import com.irlrpg.app.ui.theme.ClayShape
 import java.time.LocalDate
 
+/**
+ * Analytics screen.
+ *
+ * One filter (Today / Week / Month / Year) drives every card below it, and every
+ * number is arithmetic over the recorded log rows — there are no sample series,
+ * no smoothing, and no placeholder achievements. Charts show the range's own
+ * buckets: days for a week, weeks of the month for a month, months for a year.
+ * When there is nothing recorded yet, the whole screen collapses to one compact
+ * panel rather than a column of empty cards.
+ */
 @Composable
 fun AnalyticsScreen(
     viewModel: AnalyticsViewModel,
@@ -84,7 +98,7 @@ fun AnalyticsScreen(
                 top = padding.calculateTopPadding() + 4.dp,
                 bottom = padding.calculateBottomPadding() + 32.dp,
             ),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
                 ClaySegmentedControl(
@@ -97,271 +111,463 @@ fun AnalyticsScreen(
                 )
             }
 
-            val summary = viewModel.summaryFor(current, range)
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        ClayStatTile(
-                            emoji = "⚡",
-                            value = "${summary.xp}",
-                            label = "XP · ${range.label.lowercase()}",
-                            accent = ClayPalette.Butter,
-                            modifier = Modifier.weight(1f),
-                        )
-                        ClayStatTile(
-                            emoji = "✅",
-                            value = "${summary.completions}",
-                            label = "Targets reached",
-                            accent = ClayPalette.Mint,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        ClayStatTile(
-                            emoji = "⏳",
-                            value = if (summary.minutes > 0) DateX.formatMinutes(summary.minutes) else "—",
-                            label = "Time tracked",
-                            accent = ClayPalette.Sky,
-                            modifier = Modifier.weight(1f),
-                        )
-                        ClayStatTile(
-                            emoji = "🎯",
-                            value = "${(current.completionRate * 100).toInt()}%",
-                            label = "Today's quests done",
-                            accent = ClayPalette.Lavender,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-            }
-
-            if (current.lifetime.totalCompletions == 0) {
+            if (current.lifetime.totalCompletions == 0 && current.lifetime.totalXp == 0) {
+                // Compact empty state: one panel, no chart cards, no fake series.
                 item {
-                    ClayEmptyState(
-                        emoji = "📊",
-                        title = "Analytics start with your first completed target",
-                        message = "Log progress on a quest and this screen fills with real daily, weekly and category insight. No sample numbers are ever shown.",
-                        actionLabel = "Create a quest",
-                        onAction = onCreateQuest,
-                    )
+                    ClayCard(
+                        shape = ClayShape.Card,
+                        elevation = 12.dp,
+                        glowAlpha = 0.14f,
+                        contentPadding = PaddingValues(18.dp),
+                    ) {
+                        ClaySectionTitle(
+                            title = "No recorded activity yet",
+                            eyebrow = "Empty",
+                            caption = "Analytics are built only from rows you create by logging quests",
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        ClayPanel(
+                            shape = ClayShape.Small,
+                            tint = ClayPalette.SurfaceMuted.copy(alpha = 0.6f),
+                        ) {
+                            Text(
+                                text = "Log progress once and this screen fills in with real daily, weekly, monthly and yearly summaries.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ClayInk.Muted,
+                            )
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        ClayButton(
+                            text = "Create your first quest",
+                            onClick = onCreateQuest,
+                            accent = ClayPalette.Sky,
+                            fillWidth = true,
+                            height = 48.dp,
+                            leadingEmoji = "🧭",
+                        )
+                    }
                 }
+                item { LifetimeCard(current) }
+                return@LazyColumn
             }
 
-            item { WeeklyTrendCard(current) }
-            item { ComparisonCard(current) }
-            item { GoalsCard(current) }
-            item { CategoryCard(current) }
+            val summary = viewModel.summaryFor(current, range)
 
-            if (current.readingPages > 0 || current.readingMinutes > 0) {
-                item { ReadingCard(current) }
+            item { RangeSummaryCard(range, summary, current) }
+
+            if (summary.buckets.any { it.xp > 0 }) {
+                item { RangeChartCard(range, summary) }
             }
+
+            item { CategoryCard(range, summary) }
+
+            item { ComparisonCard(range, summary, current) }
 
             item { ConsistencyCard(current) }
 
-            item {
-                ClayCard(shape = ClayShape.Card, elevation = 10.dp) {
+            if (current.readingMinutes > 0) {
+                item { ReadingCard(current) }
+            }
+
+            item { LifetimeCard(current) }
+        }
+    }
+}
+
+// ------------------------------------------------------------------- summary
+
+@Composable
+private fun RangeSummaryCard(
+    range: AnalyticsRange,
+    summary: RangeSummary,
+    state: AnalyticsState,
+) {
+    ClayCard(
+        shape = ClayShape.Card,
+        elevation = 14.dp,
+        glowAlpha = 0.2f,
+        contentPadding = PaddingValues(18.dp),
+    ) {
+        ClaySectionTitle(
+            title = "${range.label} summary",
+            eyebrow = "Recorded",
+            caption = rangeCaption(range),
+        )
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = "${summary.xp}",
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Bold,
+                color = ClayPalette.Sky.deep,
+                maxLines = 1,
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "XP",
+                style = MaterialTheme.typography.titleSmall,
+                color = ClayInk.Muted,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+            Spacer(Modifier.weight(1f))
+            DeltaPill(summary.xp - summary.previousXp, summary.previousLabel)
+        }
+        Spacer(Modifier.height(14.dp))
+        Row {
+            ClayMiniStat(
+                value = "${summary.completions}",
+                label = "Targets reached",
+                emoji = "✅",
+                accent = ClayPalette.Mint,
+                modifier = Modifier.weight(1f),
+            )
+            ClayMiniStat(
+                value = if (summary.minutes > 0) DateX.formatMinutes(summary.minutes) else "—",
+                label = "Time tracked",
+                emoji = "⏳",
+                accent = ClayPalette.Sky,
+                modifier = Modifier.weight(1f),
+            )
+            ClayMiniStat(
+                value = "${summary.activeDays}",
+                label = "Active days",
+                emoji = "📅",
+                accent = ClayPalette.Lavender,
+                modifier = Modifier.weight(1f),
+            )
+            ClayMiniStat(
+                value = "${summary.entries}",
+                label = "Entries logged",
+                emoji = "📝",
+                accent = ClayPalette.Butter,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (range == AnalyticsRange.Today) {
+            Spacer(Modifier.height(14.dp))
+            ClayDivider(verticalPadding = 0.dp)
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Missing a day costs you nothing here. These stats exist to show momentum, not to punish gaps.",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "Today's scheduled quests",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = ClayInk.Secondary,
+                    )
+                    Text(
+                        text = "${(state.completionRate * 100).toInt()}% finished so far",
+                        style = MaterialTheme.typography.labelSmall,
                         color = ClayInk.Muted,
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun WeeklyTrendCard(state: AnalyticsState) {
-    val today = LocalDate.now()
-    val bars = state.week.map { day ->
-        ClayBar(label = day.label, value = day.xp, highlight = day.date == today)
-    }
-    ClayCard(shape = ClayShape.Card, elevation = 14.dp) {
-        ClaySectionHeader(
-            title = "Weekly trend",
-            subtitle = "XP per day · ${DateX.weekDaysOf(today).first().let { DateX.dayAndMonth(it) }} – ${
-                DateX.dayAndMonth(DateX.weekDaysOf(today).last())
-            }",
-        )
-        Spacer(Modifier.height(16.dp))
-        ClayBarChart(bars = bars, accent = ClayPalette.Sky, barArea = 116.dp)
-        Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "${state.weekXp} XP this week",
-                style = MaterialTheme.typography.titleSmall,
-                color = ClayInk.Primary,
-                modifier = Modifier.weight(1f),
-            )
-            if (state.lastWeekXp > 0) {
-                val delta = state.weekOverWeekDelta
-                Box(
-                    modifier = Modifier
-                        .clip(ClayShape.Pill)
-                        .background(
-                            if (delta >= 0) ClayPalette.Mint.soft else ClayPalette.Peach.soft
-                        )
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        text = "${if (delta >= 0) "▲" else "▼"} ${kotlin.math.abs(delta)} vs last week",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (delta >= 0) ClayPalette.Mint.deep else ClayPalette.Peach.deep,
+                Spacer(Modifier.width(12.dp))
+                Box(modifier = Modifier.width(120.dp)) {
+                    ClayProgressBar(
+                        progress = state.completionRate,
+                        accent = ClayPalette.Lavender,
+                        height = 9.dp,
                     )
                 }
-            } else {
-                Text(
-                    text = "Last week: no data",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ClayInk.Faint,
-                )
             }
         }
     }
 }
 
-@Composable
-private fun ComparisonCard(state: AnalyticsState) {
-    ClayCard(shape = ClayShape.Card, elevation = 12.dp) {
-        ClaySectionHeader(title = "Today vs yesterday", subtitle = "Same metrics, measured the same way")
-        Spacer(Modifier.height(14.dp))
-        ComparisonRow("XP earned", state.today.xp, state.yesterday.xp, ClayPalette.Butter)
-        Spacer(Modifier.height(10.dp))
-        ComparisonRow("Targets reached", state.today.completions, state.yesterday.completions, ClayPalette.Mint)
-        Spacer(Modifier.height(10.dp))
-        ComparisonRow("Minutes tracked", state.today.minutes, state.yesterday.minutes, ClayPalette.Sky)
-    }
+private fun rangeCaption(range: AnalyticsRange): String = when (range) {
+    AnalyticsRange.Today -> "Everything logged on ${DateX.fullDate(LocalDate.now())}"
+    AnalyticsRange.Week -> "Monday to today, from a week starting ${DateX.dayAndMonth(DateX.startOfWeek(LocalDate.now()))}"
+    AnalyticsRange.Month -> "Since the 1st of ${DateX.shortMonthLabel(LocalDate.now())}"
+    AnalyticsRange.Year -> "Since 1 January ${LocalDate.now().year}"
 }
 
 @Composable
-private fun ComparisonRow(
-    label: String,
-    today: Int,
-    yesterday: Int,
-    accent: com.irlrpg.app.ui.theme.ClayAccent,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = ClayInk.Secondary,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = "today $today",
-            style = MaterialTheme.typography.labelMedium,
-            color = accent.deep,
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = "yesterday $yesterday",
-            style = MaterialTheme.typography.labelMedium,
-            color = ClayInk.Faint,
-        )
+private fun DeltaPill(delta: Int, previousLabel: String) {
+    val up = delta > 0
+    val flat = delta == 0
+    val accent = when {
+        flat -> ClayPalette.Lavender
+        up -> ClayPalette.Mint
+        else -> ClayPalette.Peach
     }
+    ClayIconPill(
+        text = when {
+            flat -> "Same as $previousLabel"
+            up -> "+$delta XP vs $previousLabel"
+            else -> "$delta XP vs $previousLabel"
+        },
+        accent = accent,
+        emoji = when {
+            flat -> "➖"
+            up -> "▲"
+            else -> "▼"
+        },
+        emphasised = !flat,
+    )
 }
 
-@Composable
-private fun GoalsCard(state: AnalyticsState) {
-    ClayCard(shape = ClayShape.Card, elevation = 12.dp) {
-        ClaySectionHeader(
-            title = "Progress towards today's goals",
-            subtitle = "${(state.completionRate * 100).toInt()}% of today's scheduled quests reached their target",
-        )
-        Spacer(Modifier.height(14.dp))
-        ClayProgressBar(progress = state.completionRate, accent = ClayPalette.Lavender, height = 12.dp)
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MiniStat("Month XP", "${state.monthXp}", ClayPalette.Butter)
-            MiniStat("Month targets", "${state.monthCompletions}", ClayPalette.Mint)
-            MiniStat("Year XP", "${state.yearXp}", ClayPalette.Sky)
-        }
-    }
-}
+// ---------------------------------------------------------------------- chart
 
 @Composable
-private fun MiniStat(label: String, value: String, accent: com.irlrpg.app.ui.theme.ClayAccent) {
-    Column(
-        modifier = Modifier
-            .clip(ClayShape.Small)
-            .background(accent.soft.copy(alpha = 0.6f))
-            .padding(horizontal = 12.dp, vertical = 9.dp),
-    ) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleSmall,
-            color = ClayInk.Primary,
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = ClayInk.Muted,
-        )
-    }
-}
-
-@Composable
-private fun CategoryCard(state: AnalyticsState) {
-    ClayCard(shape = ClayShape.Card, elevation = 12.dp) {
-        ClaySectionHeader(
-            title = "Where your time goes",
-            subtitle = if (state.categories.isEmpty()) {
-                "Category splits appear once you log time-based or counted activity"
-            } else {
-                "Split by your own categories — minutes and completions"
+private fun RangeChartCard(range: AnalyticsRange, summary: RangeSummary) {
+    val today = LocalDate.now()
+    val bars = summary.buckets.map { bucket ->
+        ClayBar(
+            label = bucket.label,
+            value = bucket.xp,
+            highlight = when (range) {
+                AnalyticsRange.Week -> bucket.date == today
+                AnalyticsRange.Month -> today.toEpochDay() in bucket.date.toEpochDay()..(bucket.date.toEpochDay() + 6)
+                else -> bucket.date.month == today.month
             },
         )
-        Spacer(Modifier.height(14.dp))
-        if (state.categories.isEmpty()) {
+    }
+    ClayCard(
+        shape = ClayShape.Card,
+        elevation = 12.dp,
+        glowAlpha = 0.14f,
+        contentPadding = PaddingValues(18.dp),
+    ) {
+        ClaySectionTitle(
+            title = "${range.label} trend",
+            eyebrow = "Chart",
+            caption = summary.bucketCaption,
+        )
+        Spacer(Modifier.height(12.dp))
+        ClayBarChart(
+            bars = bars,
+            accent = ClayPalette.Sky,
+            barArea = if (range == AnalyticsRange.Year || range == AnalyticsRange.Month) 84.dp else 96.dp,
+            showValues = range != AnalyticsRange.Year,
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "Bars show XP earned in each bucket. Busiest bucket: ${
+                summary.buckets.maxByOrNull { it.xp }?.let { "${it.label} · ${it.xp} XP" } ?: "—"
+            }",
+            style = MaterialTheme.typography.labelSmall,
+            color = ClayInk.Faint,
+            maxLines = 2,
+        )
+    }
+}
+
+// ----------------------------------------------------------------- categories
+
+@Composable
+private fun CategoryCard(range: AnalyticsRange, summary: RangeSummary) {
+    ClayCard(
+        shape = ClayShape.Card,
+        elevation = 12.dp,
+        glowAlpha = 0.14f,
+        contentPadding = PaddingValues(18.dp),
+    ) {
+        ClaySectionTitle(
+            title = "Where the time went",
+            eyebrow = "Categories",
+            caption = if (summary.categories.isEmpty()) {
+                "No entries in this range yet"
+            } else {
+                "Share of XP and time across your categories · ${range.label.lowercase()} range"
+            },
+        )
+        if (summary.categories.isEmpty()) {
+            Spacer(Modifier.height(10.dp))
             Text(
-                text = "Nothing recorded yet.",
+                text = "Categorise a quest and log it — the split appears here automatically.",
                 style = MaterialTheme.typography.bodySmall,
                 color = ClayInk.Muted,
             )
-        } else {
-            val maxMinutes = state.categories.maxOf { it.minutes }.coerceAtLeast(1)
-            state.categories.forEachIndexed { index, item ->
-                if (index > 0) Spacer(Modifier.height(16.dp))
-                CategoryRow(item, maxMinutes)
-            }
+            return@ClayCard
+        }
+        Spacer(Modifier.height(6.dp))
+        val ranked = summary.categories.filter { it.xp > 0 || it.minutes > 0 }
+            .sortedByDescending { if (summary.minutes > 0) it.minutes else it.xp }
+        val leader = ranked.firstOrNull()
+        val leaderValue = leader?.let { if (summary.minutes > 0) it.minutes else it.xp }?.coerceAtLeast(1) ?: 1
+        ranked.forEachIndexed { index, category ->
+            if (index > 0) ClayDivider(verticalPadding = 0.dp)
+            CategoryRow(
+                category = category,
+                fraction = ((if (summary.minutes > 0) category.minutes else category.xp).toFloat() / leaderValue.toFloat())
+                    .coerceIn(0f, 1f),
+                useMinutes = summary.minutes > 0,
+            )
         }
     }
 }
 
 @Composable
-private fun CategoryRow(item: CategoryBreakdown, maxMinutes: Int) {
-    val accent = ClayPalette.accentById(item.accentId)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        ClayIconTile(emoji = item.emoji, accent = accent, size = 38.dp, fontSize = 17.sp)
+private fun CategoryRow(
+    category: CategoryBreakdown,
+    fraction: Float,
+    useMinutes: Boolean,
+) {
+    val accent = ClayPalette.accentById(category.accentId)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(ClayShape.Pill)
+                .background(accent.soft.copy(alpha = 0.75f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = category.emoji, fontSize = 17.sp)
+        }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = item.name,
+                text = category.name,
                 style = MaterialTheme.typography.titleSmall,
                 color = ClayInk.Primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(6.dp))
-            ClayProgressBar(
-                progress = item.minutes.toFloat() / maxMinutes.toFloat(),
-                accent = accent,
-                height = 8.dp,
-            )
-            Spacer(Modifier.height(6.dp))
             Text(
                 text = buildString {
-                    if (item.minutes > 0) {
-                        append(DateX.formatMinutes(item.minutes))
-                        append(" · ")
-                    }
-                    append("${item.completions} targets")
-                    append(" · ${item.xp} XP")
+                    append("${category.xp} XP")
+                    if (category.minutes > 0) append(" · ${DateX.formatMinutes(category.minutes)}")
+                    append(" · ${category.completions} done")
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = ClayInk.Muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(6.dp))
+            ClayProgressBar(progress = fraction, accent = accent, height = 7.dp)
+        }
+        if (useMinutes && category.minutes > 0) {
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = DateX.formatMinutes(category.minutes),
+                style = MaterialTheme.typography.labelMedium,
+                color = accent.deep,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+// ----------------------------------------------------------------- comparison
+
+@Composable
+private fun ComparisonCard(range: AnalyticsRange, summary: RangeSummary, state: AnalyticsState) {
+    ClayCard(
+        shape = ClayShape.Card,
+        elevation = 12.dp,
+        glowAlpha = 0.12f,
+        contentPadding = PaddingValues(18.dp),
+    ) {
+        ClaySectionTitle(
+            title = "Compared with ${summary.previousLabel}",
+            eyebrow = "History",
+            caption = "Same length period, straight from the log",
+        )
+        Spacer(Modifier.height(12.dp))
+        CompareRow("XP", summary.xp, summary.previousXp)
+        ClayDivider(verticalPadding = 0.dp)
+        CompareRow("Targets reached", summary.completions, summary.previousCompletions)
+        Spacer(Modifier.height(12.dp))
+        ClayPanel(
+            shape = ClayShape.Small,
+            tint = ClayPalette.SurfaceMuted.copy(alpha = 0.6f),
+        ) {
+            Text(
+                text = when (range) {
+                    AnalyticsRange.Today ->
+                        "Longest streak so far: ${state.streak.longest} days · current: ${state.streak.current} days"
+                    else ->
+                        "Average per active day this range: ${
+                            if (summary.activeDays > 0) "${summary.xp / summary.activeDays} XP" else "—"
+                        }"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = ClayInk.Secondary,
+                maxLines = 2,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompareRow(label: String, current: Int, previous: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = ClayInk.Primary,
+                maxLines = 1,
+            )
+            Text(
+                text = "now $current · before $previous",
+                style = MaterialTheme.typography.labelSmall,
+                color = ClayInk.Muted,
+                maxLines = 1,
+            )
+        }
+        val delta = current - previous
+        val accent = if (delta >= 0) ClayPalette.Mint else ClayPalette.Peach
+        ClayIconPill(
+            text = if (delta > 0) "+$delta" else "$delta",
+            accent = accent,
+            emoji = when {
+                delta > 0 -> "▲"
+                delta < 0 -> "▼"
+                else -> "➖"
+            },
+            emphasised = delta != 0,
+        )
+    }
+}
+
+// ---------------------------------------------------------------- consistency
+
+@Composable
+private fun ConsistencyCard(state: AnalyticsState) {
+    ClayCard(
+        shape = ClayShape.Card,
+        elevation = 12.dp,
+        glowAlpha = 0.12f,
+        contentPadding = PaddingValues(18.dp),
+    ) {
+        ClaySectionTitle(
+            title = "Consistency",
+            eyebrow = "Habits",
+            caption = "Days with at least one completed target",
+        )
+        Spacer(Modifier.height(12.dp))
+        Row {
+            ClayMiniStat(
+                value = "${state.streak.current}",
+                label = "Current streak",
+                emoji = "🔥",
+                accent = ClayPalette.Peach,
+                modifier = Modifier.weight(1f),
+            )
+            ClayMiniStat(
+                value = "${state.streak.longest}",
+                label = "Longest streak",
+                emoji = "🏔️",
+                accent = ClayPalette.Lavender,
+                modifier = Modifier.weight(1f),
+            )
+            ClayMiniStat(
+                value = "${(state.consistencyRate * 100).toInt()}%",
+                label = "Days active",
+                emoji = "📈",
+                accent = ClayPalette.Mint,
+                modifier = Modifier.weight(1f),
             )
         }
     }
@@ -369,44 +575,84 @@ private fun CategoryRow(item: CategoryBreakdown, maxMinutes: Int) {
 
 @Composable
 private fun ReadingCard(state: AnalyticsState) {
-    ClayCard(shape = ClayShape.Card, elevation = 12.dp) {
-        ClaySectionHeader(
-            title = "Reading stats",
-            subtitle = "From your reading category and page-counted quests",
+    ClayCard(
+        shape = ClayShape.Card,
+        elevation = 12.dp,
+        glowAlpha = 0.12f,
+        contentPadding = PaddingValues(18.dp),
+    ) {
+        ClaySectionTitle(
+            title = "Reading",
+            eyebrow = "Your reading category",
+            caption = "Derived from quests you filed under a reading-style category",
         )
-        Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MiniStat("Pages logged", "${state.readingPages}", ClayPalette.Sky)
-            MiniStat("Reading time", DateX.formatMinutes(state.readingMinutes), ClayPalette.Mint)
-            MiniStat(
-                "Reading targets",
-                "${state.categories.firstOrNull { it.name.contains("read", true) }?.completions ?: 0}",
-                ClayPalette.Butter,
+        Spacer(Modifier.height(12.dp))
+        Row {
+            ClayMiniStat(
+                value = "${state.readingPages}",
+                label = "Pages logged",
+                emoji = "📖",
+                accent = ClayPalette.Butter,
+                modifier = Modifier.weight(1f),
+            )
+            ClayMiniStat(
+                value = DateX.formatMinutes(state.readingMinutes),
+                label = "Reading time",
+                emoji = "⏳",
+                accent = ClayPalette.Sky,
+                modifier = Modifier.weight(1f),
             )
         }
     }
 }
 
+// ------------------------------------------------------------------- lifetime
+
 @Composable
-private fun ConsistencyCard(state: AnalyticsState) {
-    ClayCard(shape = ClayShape.Card, elevation = 12.dp) {
-        ClaySectionHeader(
-            title = "Consistency",
-            subtitle = "Streaks count real completed days only",
+private fun LifetimeCard(state: AnalyticsState) {
+    ClayCard(
+        shape = ClayShape.Card,
+        elevation = 10.dp,
+        glowAlpha = 0.1f,
+        contentPadding = PaddingValues(18.dp),
+    ) {
+        ClaySectionTitle(
+            title = "All time",
+            eyebrow = "Lifetime",
+            caption = state.lifetime.firstDay?.let { "Tracking since ${DateX.fullDate(it)}" }
+                ?: "Nothing recorded yet",
+            action = null,
         )
-        Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MiniStat("Current streak", "${state.streak.current}", ClayPalette.Peach)
-            MiniStat("Longest streak", "${state.streak.longest}", ClayPalette.Butter)
-            MiniStat("Active days", "${state.lifetime.activeDays}", ClayPalette.Mint)
+        Spacer(Modifier.height(12.dp))
+        Row {
+            ClayMiniStat(
+                value = "${state.lifetime.totalXp}",
+                label = "Total XP",
+                emoji = "⚡",
+                accent = ClayPalette.Butter,
+                modifier = Modifier.weight(1f),
+            )
+            ClayMiniStat(
+                value = "${state.lifetime.totalCompletions}",
+                label = "Targets reached",
+                emoji = "✅",
+                accent = ClayPalette.Mint,
+                modifier = Modifier.weight(1f),
+            )
+            ClayMiniStat(
+                value = DateX.formatMinutes(state.lifetime.totalMinutes),
+                label = "Time tracked",
+                emoji = "⏳",
+                accent = ClayPalette.Sky,
+                modifier = Modifier.weight(1f),
+            )
+            ClayMiniStat(
+                value = "${state.lifetime.activeDays}",
+                label = "Active days",
+                emoji = "📅",
+                accent = ClayPalette.Lavender,
+                modifier = Modifier.weight(1f),
+            )
         }
-        Spacer(Modifier.height(14.dp))
-        ClayProgressBar(progress = state.consistencyRate, accent = ClayPalette.Mint, height = 12.dp)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "${(state.consistencyRate * 100).toInt()}% of days since you started have activity recorded",
-            style = MaterialTheme.typography.labelSmall,
-            color = ClayInk.Muted,
-        )
     }
 }

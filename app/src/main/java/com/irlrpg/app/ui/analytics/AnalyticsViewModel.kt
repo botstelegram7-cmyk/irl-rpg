@@ -4,28 +4,20 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.irlrpg.app.core.TodaySource
 import com.irlrpg.app.data.repository.AnalyticsRepository
+import com.irlrpg.app.domain.model.AnalyticsRange
 import com.irlrpg.app.domain.model.AnalyticsState
+import com.irlrpg.app.domain.model.RangeSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 
-enum class AnalyticsRange(val label: String) {
-    Today("Today"),
-    Week("Week"),
-    Month("Month"),
-    Year("Year"),
-}
-
-/** Summary numbers for whichever range the user picked. */
-data class RangeSummary(
-    val xp: Int,
-    val completions: Int,
-    val minutes: Int,
-    val prevXp: Int,
-)
-
+/**
+ * Analytics view state. The heavy lifting — bucketing and summing the recorded
+ * log — happens in [AnalyticsRepository]; this class only tracks which range the
+ * user is looking at and exposes the matching slice.
+ */
 class AnalyticsViewModel(
     analyticsRepository: AnalyticsRepository,
     private val todaySource: TodaySource,
@@ -45,30 +37,17 @@ class AnalyticsViewModel(
         todaySource.refresh()
     }
 
-    fun summaryFor(state: AnalyticsState, range: AnalyticsRange): RangeSummary = when (range) {
-        AnalyticsRange.Today -> RangeSummary(
-            xp = state.today.xp,
-            completions = state.today.completions,
-            minutes = state.today.minutes,
-            prevXp = state.yesterday.xp,
+    /** The summary for [range]; falls back to an empty summary before first load. */
+    fun summaryFor(state: AnalyticsState, range: AnalyticsRange): RangeSummary =
+        state.ranges[range] ?: RangeSummary(
+            xp = 0,
+            completions = 0,
+            entries = 0,
+            minutes = 0,
+            activeDays = 0,
+            previousXp = 0,
+            previousCompletions = 0,
+            previousLabel = "the previous period",
+            bucketCaption = "",
         )
-        AnalyticsRange.Week -> RangeSummary(
-            xp = state.weekXp,
-            completions = state.weekCompletions,
-            minutes = state.weekMinutes,
-            prevXp = state.lastWeekXp,
-        )
-        AnalyticsRange.Month -> RangeSummary(
-            xp = state.monthXp,
-            completions = state.monthCompletions,
-            minutes = state.monthMinutes,
-            prevXp = 0,
-        )
-        AnalyticsRange.Year -> RangeSummary(
-            xp = state.yearXp,
-            completions = state.lifetime.totalCompletions,
-            minutes = state.lifetime.totalMinutes,
-            prevXp = 0,
-        )
-    }
 }

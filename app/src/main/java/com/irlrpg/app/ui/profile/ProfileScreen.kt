@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Edit
@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -38,16 +39,22 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.irlrpg.app.core.DateX
 import com.irlrpg.app.data.local.entity.ProgressionEventEntity
+import com.irlrpg.app.domain.game.CosmeticCatalog
 import com.irlrpg.app.ui.components.ClayToast
-import com.irlrpg.app.ui.design.ClayAvatar
+import com.irlrpg.app.ui.design.ClayAvatarPedestal
 import com.irlrpg.app.ui.design.ClayButton
 import com.irlrpg.app.ui.design.ClayButtonStyle
 import com.irlrpg.app.ui.design.ClayCard
+import com.irlrpg.app.ui.design.ClayDivider
+import com.irlrpg.app.ui.design.ClayDot
 import com.irlrpg.app.ui.design.ClayIconButton
+import com.irlrpg.app.ui.design.ClayIconPill
 import com.irlrpg.app.ui.design.ClayIconTile
+import com.irlrpg.app.ui.design.ClayMiniStat
+import com.irlrpg.app.ui.design.ClayPanel
 import com.irlrpg.app.ui.design.ClayProgressBar
 import com.irlrpg.app.ui.design.ClayScaffold
-import com.irlrpg.app.ui.design.ClaySectionHeader
+import com.irlrpg.app.ui.design.ClaySectionTitle
 import com.irlrpg.app.ui.design.ClayTextField
 import com.irlrpg.app.ui.design.ClayTopBar
 import com.irlrpg.app.ui.theme.ClayAccent
@@ -56,6 +63,15 @@ import com.irlrpg.app.ui.theme.ClayPalette
 import com.irlrpg.app.ui.theme.ClayShape
 import java.time.LocalDate
 
+/**
+ * Character screen.
+ *
+ * The avatar is a layered 2D illustration ([ClayAvatarPedestal]) whose ring
+ * colour is driven by the equipped cosmetic frame — so cosmetics added later
+ * change the artwork without touching this layout. Level, rank and XP are shown
+ * once, in one place, and the remaining rows are quiet statistics rather than a
+ * wall of raised cards.
+ */
 @Composable
 fun ProfileScreen(
     viewModel: ProfileViewModel,
@@ -71,12 +87,13 @@ fun ProfileScreen(
     val message by viewModel.message.collectAsStateWithLifecycle()
     var renaming by remember { mutableStateOf(false) }
     var nameDraft by remember { mutableStateOf("") }
+    val compact = LocalConfiguration.current.screenWidthDp < 360
 
     ClayScaffold(
         topBar = {
             ClayTopBar(
                 title = "Character",
-                subtitle = "Your progression, stored locally on this device",
+                subtitle = "Stored locally on this device",
                 accent = ClayPalette.Blush,
                 actions = {
                     ClayIconButton(
@@ -94,6 +111,11 @@ fun ProfileScreen(
         },
         bottomBar = bottomBar,
     ) { padding ->
+        val player = state.player
+        val frame = CosmeticCatalog.byCode(player?.stats?.cosmeticFrame)
+        val title = CosmeticCatalog.byCode(player?.stats?.displayTitle)
+        val frameAccent = frame?.let { ClayPalette.accentById(it.accentId) } ?: ClayPalette.Blush
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
@@ -102,67 +124,219 @@ fun ProfileScreen(
                 top = padding.calculateTopPadding() + 4.dp,
                 bottom = padding.calculateBottomPadding() + 32.dp,
             ),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            val player = state.player
             item {
-                ClayCard(shape = ClayShape.Hero, elevation = 18.dp, glowAlpha = 0.3f, contentPadding = PaddingValues(22.dp)) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        ClayAvatar(
-                            emoji = player?.rankEmoji ?: "🌱",
-                            level = player?.level ?: 1,
-                            progress = player?.progress ?: 0f,
+                ClayCard(
+                    shape = ClayShape.Hero,
+                    elevation = 18.dp,
+                    glowAlpha = 0.3f,
+                    contentPadding = PaddingValues(20.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ClayAvatarPedestal(
+                            emoji = frame?.emoji ?: "🌱",
                             accent = ClayPalette.Blush,
-                            avatarSize = 120.dp,
+                            frameAccent = frameAccent,
+                            progress = player?.progress ?: 0f,
+                            size = if (compact) 124.dp else 152.dp,
+                            badge = "LV ${player?.level ?: 1}",
                         )
-                        Spacer(Modifier.height(14.dp))
-                        Text(
-                            text = player?.stats?.name ?: "Adventurer",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = ClayInk.Primary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = "${player?.rankTitle ?: "Wanderer"} · Level ${player?.level ?: 1}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = ClayPalette.Lavender.deep,
-                        )
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.width(if (compact) 8.dp else 14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = player?.stats?.name ?: "Adventurer",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = ClayInk.Primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = "${player?.rankEmoji ?: "🌱"} ${player?.rankTitle ?: "Wanderer"}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ClayInk.Secondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            ClayIconPill(
+                                text = title?.name ?: "Rank title",
+                                accent = ClayPalette.Lavender,
+                                emoji = if (title != null) "🎖️" else null,
+                                emphasised = title != null,
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    ClayPanel(
+                        shape = ClayShape.Small,
+                        tint = ClayPalette.SurfaceMuted.copy(alpha = 0.65f),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ClayMiniStat(
+                                value = "${player?.xpIntoLevel ?: 0}",
+                                label = "XP into level",
+                                accent = ClayPalette.Lavender,
+                                modifier = Modifier.weight(1f),
+                            )
+                            ClayMiniStat(
+                                value = "${player?.xpForCurrentLevel ?: 0}",
+                                label = "Level cost",
+                                accent = ClayPalette.Sky,
+                                modifier = Modifier.weight(1f),
+                            )
+                            ClayMiniStat(
+                                value = "${player?.stats?.totalXp ?: 0}",
+                                label = "Total XP",
+                                accent = ClayPalette.Butter,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        Spacer(Modifier.height(10.dp))
                         ClayProgressBar(
                             progress = player?.progress ?: 0f,
                             accent = ClayPalette.Lavender,
-                            height = 13.dp,
+                            height = 11.dp,
                         )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(7.dp))
                         Text(
-                            text = "${player?.xpIntoLevel ?: 0} / ${player?.xpForCurrentLevel ?: 0} XP towards level ${(player?.level ?: 1) + 1} · ${
-                                player?.stats?.totalXp ?: 0
-                            } XP lifetime",
+                            text = "Next level at ${player?.nextLevelXp ?: 0} XP — progress is computed from your recorded quests only.",
                             style = MaterialTheme.typography.labelSmall,
                             color = ClayInk.Muted,
+                            maxLines = 2,
                         )
-                        Spacer(Modifier.height(16.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            ClayButton(
-                                text = "Rename",
-                                onClick = {
-                                    nameDraft = player?.stats?.name ?: ""
-                                    renaming = true
-                                },
-                                accent = ClayPalette.Lavender,
-                                style = ClayButtonStyle.Soft,
-                                height = 44.dp,
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ClayButton(
+                            text = "Rename",
+                            onClick = {
+                                nameDraft = player?.stats?.name ?: ""
+                                renaming = true
+                            },
+                            accent = ClayPalette.Lavender,
+                            style = ClayButtonStyle.Soft,
+                            height = 42.dp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        ClayButton(
+                            text = "Skills",
+                            onClick = onOpenSkills,
+                            accent = ClayPalette.Mint,
+                            style = ClayButtonStyle.Soft,
+                            height = 42.dp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        ClayButton(
+                            text = "Looks",
+                            onClick = onOpenCustomize,
+                            accent = ClayPalette.Peach,
+                            style = ClayButtonStyle.Soft,
+                            height = 42.dp,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+
+            item {
+                ClayCard(
+                    shape = ClayShape.Card,
+                    elevation = 12.dp,
+                    glowAlpha = 0.14f,
+                    contentPadding = PaddingValues(18.dp),
+                ) {
+                    ClaySectionTitle(
+                        title = "Growth",
+                        eyebrow = "Overview",
+                        caption = "Counts come straight from your quest log",
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row {
+                        ClayMiniStat(
+                            value = "${state.levelUps}",
+                            label = "Level-ups",
+                            emoji = "🎉",
+                            accent = ClayPalette.Butter,
+                            modifier = Modifier.weight(1f),
+                        )
+                        ClayMiniStat(
+                            value = "${state.activeQuestCount}/${state.questCount}",
+                            label = "Active quests",
+                            emoji = "🧭",
+                            accent = ClayPalette.Lavender,
+                            modifier = Modifier.weight(1f),
+                        )
+                        ClayMiniStat(
+                            value = "${state.logCount}",
+                            label = "Logged entries",
+                            emoji = "📝",
+                            accent = ClayPalette.Sky,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+
+            item {
+                ClayCard(
+                    shape = ClayShape.Card,
+                    elevation = 12.dp,
+                    glowAlpha = 0.14f,
+                    contentPadding = PaddingValues(18.dp),
+                ) {
+                    ClaySectionTitle(
+                        title = "Grow your character",
+                        eyebrow = "Sections",
+                        caption = "Everything below is driven by the activity you record",
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    ProfileLink("🌳", "Skill tree", "Nodes, prerequisites and mastery", ClayPalette.Mint, onOpenSkillTree)
+                    ProfileLink("🏔️", "Challenges", "Multi-objective goals with one reward", ClayPalette.Peach, onOpenChallenges)
+                    ProfileLink("🏅", "Achievements", "Unlocked from your real history", ClayPalette.Butter, onOpenAchievements)
+                    ProfileLink("🕰️", "Completion history", "Every logged entry, day by day", ClayPalette.Sky, onOpenHistory)
+                    ProfileLink("🎨", "Customize", "Titles and avatar frames", ClayPalette.Lavender, onOpenCustomize, isLast = true)
+                }
+            }
+
+            item {
+                ClayCard(
+                    shape = ClayShape.Card,
+                    elevation = 12.dp,
+                    glowAlpha = 0.14f,
+                    contentPadding = PaddingValues(18.dp),
+                ) {
+                    ClaySectionTitle(
+                        title = "Progression history",
+                        eyebrow = "Timeline",
+                        caption = if (state.history.isEmpty()) {
+                            "Your first completion starts the log"
+                        } else {
+                            "Newest first · ${state.history.size} recorded events"
+                        },
+                    )
+                    if (state.history.isEmpty()) {
+                        // Compact, single-line empty state — no card inside a card.
+                        Spacer(Modifier.height(12.dp))
+                        ClayPanel(
+                            shape = ClayShape.Small,
+                            tint = ClayPalette.SurfaceMuted.copy(alpha = 0.6f),
+                        ) {
+                            Text(
+                                text = "Nothing recorded yet. Complete a quest and the timeline fills in automatically.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ClayInk.Muted,
                             )
-                            ClayButton(
-                                text = "Skills",
-                                onClick = onOpenSkills,
-                                accent = ClayPalette.Butter,
-                                style = ClayButtonStyle.Soft,
-                                height = 44.dp,
+                        }
+                    } else {
+                        Spacer(Modifier.height(6.dp))
+                        state.history.take(6).forEachIndexed { index, event ->
+                            if (index > 0) ClayDivider(verticalPadding = 0.dp)
+                            TimelineRow(
+                                event = event,
+                                isLast = index == state.history.take(6).lastIndex,
                             )
                         }
                     }
@@ -170,79 +344,30 @@ fun ProfileScreen(
             }
 
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StatTile("⚡", "${state.player?.stats?.totalXp ?: 0}", "Total XP", ClayPalette.Butter, Modifier.weight(1f))
-                    StatTile("🎉", "${state.levelUps}", "Level-ups earned", ClayPalette.Mint, Modifier.weight(1f))
-                }
-            }
-
-            item {
-                ClayCard(shape = ClayShape.Card, elevation = 12.dp) {
-                    ClaySectionHeader(
-                        title = "Grow your character",
-                        subtitle = "Every section below is driven by the activity you record",
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    ProfileLink("🌳", "Skill tree", "Nodes, prerequisites and mastery", ClayPalette.Mint, onOpenSkillTree)
-                    ProfileLink("🏔️", "Challenges", "Multi-objective goals with one reward", ClayPalette.Peach, onOpenChallenges)
-                    ProfileLink("🏅", "Achievements", "Unlocked from your real history", ClayPalette.Butter, onOpenAchievements)
-                    ProfileLink("🕰️", "Completion history", "Every logged entry, day by day", ClayPalette.Sky, onOpenHistory)
-                    ProfileLink("🎨", "Customize", "Titles and avatar frames", ClayPalette.Lavender, onOpenCustomize)
-                }
-            }
-
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StatTile("🧩", "${state.activeQuestCount}/${state.questCount}", "Active quests", ClayPalette.Lavender, Modifier.weight(1f))
-                    StatTile("📝", "${state.logCount}", "Logged entries", ClayPalette.Sky, Modifier.weight(1f))
-                }
-            }
-
-            item {
-                ClayCard(shape = ClayShape.Card, elevation = 12.dp) {
-                    ClaySectionHeader(
-                        title = "Progression history",
-                        subtitle = if (state.history.isEmpty()) "Level-ups and XP awards will be listed here" else "Newest first",
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    if (state.history.isEmpty()) {
-                        Text(
-                            text = "Nothing recorded yet — your first quest completion starts the log.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = ClayInk.Muted,
-                        )
-                    }
-                }
-            }
-
-            items(state.history.take(15), key = { it.id }) { event ->
-                HistoryRow(event)
-            }
-
-            item {
-                ClayCard(shape = ClayShape.Card, elevation = 12.dp) {
-                    ClaySectionHeader(
+                ClayCard(
+                    shape = ClayShape.Card,
+                    elevation = 10.dp,
+                    glowAlpha = 0.1f,
+                    contentPadding = PaddingValues(18.dp),
+                ) {
+                    ClaySectionTitle(
                         title = "About & your data",
-                        subtitle = "IRL RPG works fully offline",
+                        eyebrow = "Offline",
+                        caption = "No account, no ads, no tracking, no paid service",
                     )
                     Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = "No account, no ads, no tracking and no paid service. Everything you record lives in a local SQLite database on this device and stays there.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = ClayInk.Muted,
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        MiniCount("Quests", state.questCount, ClayPalette.Lavender)
-                        MiniCount("Categories", state.categoriesCount, ClayPalette.Sky)
-                        MiniCount("Skills", state.skillCount, ClayPalette.Butter)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MiniCount("Quests", state.questCount, ClayPalette.Lavender, Modifier.weight(1f))
+                        MiniCount("Categories", state.categoriesCount, ClayPalette.Sky, Modifier.weight(1f))
+                        MiniCount("Skills", state.skillCount, ClayPalette.Butter, Modifier.weight(1f))
                     }
                     Spacer(Modifier.height(12.dp))
                     state.player?.stats?.let { stats ->
                         Text(
-                            text = "Tracking since ${DateX.fullDate(LocalDate.ofEpochDay(stats.createdAtEpochDay))}",
+                            text = "Tracking since ${DateX.fullDate(LocalDate.ofEpochDay(stats.createdAtEpochDay))} · everything stays on this device",
                             style = MaterialTheme.typography.labelSmall,
                             color = ClayInk.Faint,
+                            maxLines = 2,
                         )
                     }
                 }
@@ -304,27 +429,41 @@ private fun ProfileLink(
     subtitle: String,
     accent: ClayAccent,
     onClick: () -> Unit,
+    isLast: Boolean = false,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(ClayShape.Medium)
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp, horizontal = 6.dp),
+            .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ClayIconTile(emoji = emoji, accent = accent, size = 42.dp, fontSize = 19.sp)
+        // Flat tinted tile: rows inside a card should not raise another card.
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(ClayShape.Pill)
+                .background(accent.soft.copy(alpha = 0.7f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = emoji, fontSize = 19.sp)
+        }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
                 color = ClayInk.Primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.labelSmall,
                 color = ClayInk.Muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         Icon(
@@ -334,106 +473,86 @@ private fun ProfileLink(
             modifier = Modifier.size(20.dp),
         )
     }
+    if (!isLast) ClayDivider(verticalPadding = 0.dp, color = ClayInk.Faint.copy(alpha = 0.16f))
 }
 
 @Composable
-private fun StatTile(
-    emoji: String,
-    value: String,
-    label: String,
-    accent: com.irlrpg.app.ui.theme.ClayAccent,
-    modifier: Modifier = Modifier,
-) {
-    ClayCard(
-        modifier = modifier,
-        shape = ClayShape.Medium,
-        elevation = 10.dp,
-        contentPadding = PaddingValues(14.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            ClayIconTile(emoji = emoji, accent = accent, size = 36.dp, fontSize = 16.sp)
-            Spacer(Modifier.width(10.dp))
-            Column {
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = ClayInk.Primary,
-                    maxLines = 1,
-                )
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ClayInk.Muted,
-                    maxLines = 1,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun HistoryRow(event: ProgressionEventEntity) {
+private fun TimelineRow(event: ProgressionEventEntity, isLast: Boolean) {
     val isLevelUp = event.type == "level_up"
     val accent = when {
         isLevelUp -> ClayPalette.Butter
         event.type == "undo" -> ClayPalette.Peach
         else -> ClayPalette.Mint
     }
-    ClayCard(
-        shape = ClayShape.Medium,
-        elevation = 9.dp,
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            ClayIconTile(
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            ClayDot(
                 emoji = if (isLevelUp) "🎉" else if (event.type == "undo") "↩️" else "⚡",
                 accent = accent,
-                size = 40.dp,
-                fontSize = 18.sp,
+                size = 34.dp,
             )
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = event.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = ClayInk.Primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = listOfNotNull(
-                        event.detail,
-                        DateX.relativeLabel(LocalDate.ofEpochDay(event.epochDay)),
-                    ).joinToString(" · "),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ClayInk.Muted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (event.amount != 0) {
+            if (!isLast) {
                 Box(
                     modifier = Modifier
-                        .clip(ClayShape.Pill)
-                        .background(accent.soft)
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                ) {
-                    Text(
-                        text = if (event.amount > 0) "+${event.amount} XP" else "${event.amount} XP",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = accent.deep,
-                    )
-                }
+                        .size(width = 2.dp, height = 30.dp)
+                        .background(ClayInk.Faint.copy(alpha = 0.25f)),
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(top = 4.dp, bottom = 14.dp),
+        ) {
+            Text(
+                text = event.title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = ClayInk.Primary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = listOfNotNull(
+                    event.detail,
+                    DateX.relativeLabel(LocalDate.ofEpochDay(event.epochDay)),
+                ).joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = ClayInk.Muted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (event.amount != 0) {
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .clip(ClayShape.Pill)
+                    .background(accent.soft)
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+            ) {
+                Text(
+                    text = if (event.amount > 0) "+${event.amount} XP" else "${event.amount} XP",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accent.deep,
+                    maxLines = 1,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun MiniCount(label: String, value: Int, accent: com.irlrpg.app.ui.theme.ClayAccent) {
+private fun MiniCount(
+    label: String,
+    value: Int,
+    accent: ClayAccent,
+    modifier: Modifier = Modifier,
+) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .clip(ClayShape.Small)
             .background(accent.soft.copy(alpha = 0.6f))
             .padding(horizontal = 12.dp, vertical = 9.dp),
@@ -442,11 +561,14 @@ private fun MiniCount(label: String, value: Int, accent: com.irlrpg.app.ui.theme
             text = "$value",
             style = MaterialTheme.typography.titleSmall,
             color = ClayInk.Primary,
+            maxLines = 1,
         )
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = ClayInk.Muted,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

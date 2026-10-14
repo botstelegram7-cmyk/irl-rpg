@@ -38,6 +38,8 @@ import com.irlrpg.app.domain.model.AchievementTier
 import com.irlrpg.app.domain.model.AchievementView
 import com.irlrpg.app.ui.design.ClayCard
 import com.irlrpg.app.ui.design.ClayChip
+import com.irlrpg.app.ui.design.ClayDivider
+import com.irlrpg.app.ui.design.ClayDot
 import com.irlrpg.app.ui.design.ClayEmptyState
 import com.irlrpg.app.ui.design.ClayProgressBar
 import com.irlrpg.app.ui.design.ClayScaffold
@@ -159,9 +161,61 @@ fun AchievementsScreen(viewModel: AchievementsViewModel) {
                 }
             }
 
-            items(visible, key = { it.def.code }) { entry ->
-                AchievementRow(entry)
+            // Achievements are grouped into one card per category with flat rows:
+            // a wall of 30 raised cards told the eye nothing about progress.
+            val groups = AchievementCategory.entries.mapNotNull { group ->
+                visible.filter { it.def.category == group }.takeIf { it.isNotEmpty() }
             }
+            items(groups, key = { group -> group.first().def.category.name }) { group ->
+                AchievementGroup(group)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AchievementGroup(entries: List<AchievementView>) {
+    val category = entries.first().def.category
+    val accent = categoryAccent(category)
+    val earned = entries.count { it.earned }
+
+    ClayCard(
+        shape = ClayShape.Card,
+        elevation = 12.dp,
+        glowAlpha = 0.14f,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ClayDot(emoji = category.emoji, accent = accent, size = 34.dp)
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = category.label,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = ClayInk.Primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "$earned of ${entries.size} unlocked",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ClayInk.Muted,
+                    maxLines = 1,
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Box(modifier = Modifier.width(72.dp)) {
+                ClayProgressBar(
+                    progress = if (entries.isEmpty()) 0f else earned.toFloat() / entries.size.toFloat(),
+                    accent = accent,
+                    height = 8.dp,
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        entries.forEachIndexed { index, entry ->
+            if (index > 0) ClayDivider(verticalPadding = 0.dp)
+            AchievementRow(entry)
         }
     }
 }
@@ -176,65 +230,67 @@ private fun AchievementRow(entry: AchievementView) {
         label = "achievementProgress",
     )
 
-    ClayCard(
-        shape = ClayShape.Card,
-        elevation = if (entry.earned) 12.dp else 8.dp,
-        glowAlpha = if (entry.earned) 0.2f else 0.1f,
-        contentPadding = PaddingValues(16.dp),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(ClayShape.Tile)
-                    .background(if (entry.earned) accent.soft else ClayPalette.SurfaceMuted),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(text = if (entry.earned) def.emoji else "🔒", fontSize = 22.sp)
-            }
-            Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = def.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = if (entry.earned) ClayInk.Primary else ClayInk.Secondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    TierBadge(def.tier)
-                }
-                Spacer(Modifier.height(2.dp))
+        // Flat badge: nested cards are gone, only the group carries elevation.
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(ClayShape.Pill)
+                .background(if (entry.earned) accent.soft else ClayPalette.SurfaceMuted.copy(alpha = 0.7f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = if (entry.earned) def.emoji else "🔒", fontSize = 20.sp)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = def.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ClayInk.Muted,
+                    text = def.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (entry.earned) ClayInk.Primary else ClayInk.Secondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Spacer(Modifier.width(8.dp))
+                TierBadge(def.tier)
+            }
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = def.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = ClayInk.Muted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(8.dp))
+            if (entry.earned) {
+                Text(
+                    text = buildString {
+                        append("Earned ")
+                        append(formatEpochDay(entry.earnedEpochDay))
+                        def.unlocksCosmetic?.let { append(" · unlocks a reward in Customize") }
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accent.deep,
                     maxLines = 2,
+                )
+            } else {
+                ClayProgressBar(progress = fraction, accent = accent, height = 8.dp)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "${entry.progress.coerceAtMost(def.target)} of ${def.target} recorded so far",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ClayInk.Faint,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.height(8.dp))
-                if (entry.earned) {
-                    Text(
-                        text = buildString {
-                            append("Earned ")
-                            append(formatEpochDay(entry.earnedEpochDay))
-                            def.unlocksCosmetic?.let { append(" · unlocks a reward in Customize") }
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = accent.deep,
-                    )
-                } else {
-                    ClayProgressBar(progress = fraction, accent = accent, height = 8.dp)
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "${entry.progress.coerceAtMost(def.target)} of ${def.target} · ${def.category.label}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ClayInk.Faint,
-                    )
-                }
             }
         }
     }

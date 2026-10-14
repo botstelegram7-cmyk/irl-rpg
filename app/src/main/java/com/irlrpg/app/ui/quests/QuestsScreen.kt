@@ -2,6 +2,7 @@ package com.irlrpg.app.ui.quests
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.MoreVert
@@ -27,6 +27,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +44,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.irlrpg.app.data.local.entity.CategoryEntity
 import com.irlrpg.app.data.repository.QuestProgress
+import com.irlrpg.app.domain.model.QuestDifficulty
 import com.irlrpg.app.domain.model.QuestWithProgress
 import com.irlrpg.app.domain.model.ScheduleKind
 import com.irlrpg.app.domain.model.TrackingKind
@@ -55,19 +57,33 @@ import com.irlrpg.app.ui.design.ClayButton
 import com.irlrpg.app.ui.design.ClayButtonStyle
 import com.irlrpg.app.ui.design.ClayCard
 import com.irlrpg.app.ui.design.ClayChip
-import com.irlrpg.app.ui.design.ClayEmptyState
+import com.irlrpg.app.ui.design.ClayDivider
+import com.irlrpg.app.ui.design.ClayDot
+import com.irlrpg.app.ui.design.ClayDropdownChip
 import com.irlrpg.app.ui.design.ClayFab
 import com.irlrpg.app.ui.design.ClayIconButton
-import com.irlrpg.app.ui.design.ClayIconTile
+import com.irlrpg.app.ui.design.ClayIconPill
+import com.irlrpg.app.ui.design.ClayPanel
 import com.irlrpg.app.ui.design.ClayProgressBar
 import com.irlrpg.app.ui.design.ClayScaffold
 import com.irlrpg.app.ui.design.ClaySectionHeader
+import com.irlrpg.app.ui.design.ClaySectionTitle
+import com.irlrpg.app.ui.design.ClaySegmentedControl
 import com.irlrpg.app.ui.design.ClayTextField
 import com.irlrpg.app.ui.design.ClayTopBar
 import com.irlrpg.app.ui.theme.ClayInk
 import com.irlrpg.app.ui.theme.ClayPalette
 import com.irlrpg.app.ui.theme.ClayShape
 
+/**
+ * Quest board.
+ *
+ * The board is organised by category (each category is one card with flat rows)
+ * rather than one raised card per quest, which keeps long lists calm. Filtering
+ * is now a single compact bar: a segmented control for the four primary filters
+ * and two dropdown chips for category and sorting — no more three rows of
+ * horizontally overflowing chips.
+ */
 @Composable
 fun QuestsScreen(
     viewModel: QuestsViewModel,
@@ -88,11 +104,21 @@ fun QuestsScreen(
         onPauseOrDispose { }
     }
 
+    val primaryFilters = listOf(QuestFilter.All, QuestFilter.Today, QuestFilter.Active, QuestFilter.Paused)
+    val secondaryFilters = listOf(QuestFilter.Challenges, QuestFilter.MultiStep)
+    val filtersActive = state.query.isNotBlank() ||
+        state.categoryFilter != null ||
+        state.filter != QuestFilter.All
+
     ClayScaffold(
         topBar = {
             ClayTopBar(
                 title = "Quest board",
-                subtitle = if (state.loading) "Loading…" else "${state.quests.size} quests · ${state.categories.size} categories",
+                subtitle = if (state.loading) {
+                    "Loading…"
+                } else {
+                    "${state.quests.size} shown · ${state.categories.size} categories · offline"
+                },
                 accent = ClayPalette.Mint,
             )
         },
@@ -121,95 +147,107 @@ fun QuestsScreen(
                 }
 
                 item {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(QuestFilter.entries.toList()) { filter ->
-                            ClayChip(
-                                text = filter.label,
-                                selected = state.filter == filter,
-                                onClick = { viewModel.setFilter(filter) },
-                                accent = ClayPalette.Mint,
-                            )
-                        }
-                    }
+                    ClaySegmentedControl(
+                        options = primaryFilters,
+                        selected = if (state.filter in primaryFilters) state.filter else QuestFilter.All,
+                        onSelect = viewModel::setFilter,
+                        label = { it.label },
+                        accent = ClayPalette.Mint,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
 
                 item {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        item {
-                            ClayChip(
-                                text = "All categories",
-                                selected = state.categoryFilter == null,
-                                onClick = { viewModel.setCategoryFilter(null) },
-                                accent = ClayPalette.Lavender,
-                            )
-                        }
-                        items(state.categories, key = { it.id }) { category ->
-                            ClayChip(
-                                text = category.name,
-                                selected = state.categoryFilter == category.id,
-                                onClick = { viewModel.setCategoryFilter(category.id) },
-                                accent = ClayPalette.accentById(category.accentId),
-                                leadingEmoji = category.emoji,
-                            )
-                        }
-                        item {
-                            ClayChip(
-                                text = "Manage",
-                                selected = false,
-                                onClick = { showCategories = true },
-                                accent = ClayPalette.Sky,
-                                leadingEmoji = "⚙️",
-                            )
-                        }
-                    }
+                    FilterControls(
+                        state = state,
+                        secondaryFilters = secondaryFilters,
+                        onCategory = viewModel::setCategoryFilter,
+                        onSort = viewModel::setSort,
+                        onFilter = viewModel::setFilter,
+                        onManageCategories = { showCategories = true },
+                    )
                 }
 
-                item {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(QuestSort.entries.toList()) { sort ->
-                            ClayChip(
-                                text = "Sort: ${sort.label}",
-                                selected = state.sort == sort,
-                                onClick = { viewModel.setSort(sort) },
-                                accent = ClayPalette.Sky,
+                if (filtersActive) {
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = activeFilterSummary(state),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ClayInk.Muted,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
                             )
+                            TextButton(onClick = viewModel::clearFilters) {
+                                Text(
+                                    text = "Clear",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = ClayPalette.Mint.deep,
+                                )
+                            }
                         }
                     }
                 }
 
                 if (state.quests.isEmpty() && !state.loading) {
                     item {
-                        ClayEmptyState(
-                            emoji = if (state.filter == QuestFilter.Paused) "⏸️" else "🧩",
-                            title = when (state.filter) {
-                                QuestFilter.All -> if (state.query.isBlank()) "No quests yet" else "No matches"
-                                QuestFilter.Today -> "Nothing scheduled today"
-                                QuestFilter.Active -> "No active quests"
-                                QuestFilter.Challenges -> "No long-term challenges yet"
-                                QuestFilter.MultiStep -> "No multi-step quests yet"
-                                QuestFilter.Paused -> "No paused quests"
-                            },
-                            message = "Activities are yours to define — reading pages, writing words, coding hours, training sets, practising an instrument, anything measurable.",
-                            actionLabel = "Create a quest",
-                            onAction = onCreateQuest,
-                        )
+                        ClayPanel(
+                            shape = ClayShape.Card,
+                            tint = ClayPalette.SurfaceCream,
+                            contentPadding = PaddingValues(18.dp),
+                            onClick = onCreateQuest,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                ClayDot(emoji = if (filtersActive) "🔍" else "🧩", accent = ClayPalette.Mint, size = 40.dp)
+                                Spacer(Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = if (filtersActive) "Nothing matches these filters" else "No quests yet",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = ClayInk.Primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = if (filtersActive) {
+                                            "Adjust the filters or clear them to see the rest of your board."
+                                        } else {
+                                            "Reading pages, writing words, coding hours, workouts, practice — anything measurable."
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = ClayInk.Muted,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        text = if (filtersActive) "Tap to create a new quest" else "Tap to create your first quest",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = ClayPalette.Mint.deep,
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+                        }
                     }
                 } else {
-                    items(state.quests, key = { it.quest.id }) { item ->
-                        QuestBoardCard(
-                            item = item,
-                            onOpen = { onOpenQuest(item.quest.id) },
-                            onLog = {
-                                if (item.quest.trackingKind == TrackingKind.Milestone.name) {
+                    val sections = groupByCategory(state.quests, state.categories)
+                    items(sections, key = { it.key }) { section ->
+                        QuestSection(
+                            section = section,
+                            onOpen = onOpenQuest,
+                            onLog = { item ->
+                                if (item.quest.trackingKind == TrackingKind.Milestone.name && !item.isComplete) {
                                     viewModel.log(item.quest.id, 1L)
                                 } else {
                                     quickLogItem = item
                                 }
                             },
-                            onEdit = { onEditQuest(item.quest.id) },
-                            onDuplicate = { viewModel.duplicateQuest(item.quest.id) },
-                            onToggleActive = { viewModel.toggleActive(item.quest.id) },
-                            onDelete = { pendingDelete = item },
+                            onEdit = onEditQuest,
+                            onDuplicate = viewModel::duplicateQuest,
+                            onToggleActive = viewModel::toggleActive,
+                            onDelete = { pendingDelete = it },
                         )
                     }
                 }
@@ -275,8 +313,182 @@ fun QuestsScreen(
     )
 }
 
+private fun activeFilterSummary(state: QuestsUiState): String = buildList {
+    if (state.query.isNotBlank()) add("search \"${state.query.trim()}\"")
+    if (state.categoryFilter != null) {
+        val name = state.categories.firstOrNull { it.id == state.categoryFilter }?.name
+        if (name != null) add("category $name")
+    }
+    if (state.filter != QuestFilter.All) add("filter ${state.filter.label}")
+}.joinToString(" · ").let { if (it.isBlank()) "Showing everything" else it }
+
+/** Category-scoped grouping: the section key is stable so LazyColumn can reuse it. */
+private data class QuestSectionData(
+    val key: String,
+    val title: String,
+    val emoji: String,
+    val categoryId: Long?,
+    val items: List<QuestWithProgress>,
+)
+
+private fun groupByCategory(
+    quests: List<QuestWithProgress>,
+    categories: List<CategoryEntity>,
+): List<QuestSectionData> {
+    val byCategory = quests.groupBy { it.quest.categoryId }
+    val ordered = mutableListOf<QuestSectionData>()
+    categories.forEach { category ->
+        byCategory[category.id]?.takeIf { it.isNotEmpty() }?.let { rows ->
+            ordered += QuestSectionData(
+                key = "cat-${category.id}",
+                title = category.name,
+                emoji = category.emoji,
+                categoryId = category.id,
+                items = rows,
+            )
+        }
+    }
+    byCategory[null]?.takeIf { it.isNotEmpty() }?.let { rows ->
+        ordered += QuestSectionData("cat-none", "Uncategorised", "🗂️", null, rows)
+    }
+    return ordered
+}
+
+// ------------------------------------------------------- compact filter bar
+
 @Composable
-private fun QuestBoardCard(
+private fun FilterControls(
+    state: QuestsUiState,
+    secondaryFilters: List<QuestFilter>,
+    onCategory: (Long?) -> Unit,
+    onSort: (QuestSort) -> Unit,
+    onFilter: (QuestFilter) -> Unit,
+    onManageCategories: () -> Unit,
+) {
+    val selectedCategory = state.categories.firstOrNull { it.id == state.categoryFilter }
+
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ClayDropdownChip(
+                text = selectedCategory?.let { "Category: ${it.name}" } ?: "All categories",
+                emoji = selectedCategory?.emoji ?: "🗂️",
+                accent = ClayPalette.Lavender,
+                active = state.categoryFilter != null,
+                modifier = Modifier.weight(1f),
+            ) { dismiss ->
+                DropdownMenuItem(
+                    text = { Text("All categories", style = MaterialTheme.typography.bodyMedium) },
+                    onClick = { onCategory(null); dismiss() },
+                )
+                state.categories.forEach { category ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "${category.emoji}  ${category.name}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        onClick = { onCategory(category.id); dismiss() },
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text("Manage categories…", style = MaterialTheme.typography.bodyMedium) },
+                    onClick = { onManageCategories(); dismiss() },
+                )
+            }
+            ClayDropdownChip(
+                text = "Sort: ${state.sort.label}",
+                emoji = "↕️",
+                accent = ClayPalette.Sky,
+                active = false,
+                modifier = Modifier.weight(1f),
+            ) { dismiss ->
+                QuestSort.entries.forEach { sort ->
+                    DropdownMenuItem(
+                        text = { Text(sort.label, style = MaterialTheme.typography.bodyMedium) },
+                        onClick = { onSort(sort); dismiss() },
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            secondaryFilters.forEach { filter ->
+                ClayChip(
+                    text = filter.label,
+                    selected = state.filter == filter,
+                    onClick = { onFilter(if (state.filter == filter) QuestFilter.All else filter) },
+                    accent = if (filter == QuestFilter.Challenges) ClayPalette.Peach else ClayPalette.Butter,
+                    leadingEmoji = if (filter == QuestFilter.Challenges) "🏔️" else "🪜",
+                )
+            }
+        }
+    }
+}
+
+// ------------------------------------------------------------------ sections
+
+@Composable
+private fun QuestSection(
+    section: QuestSectionData,
+    onOpen: (Long) -> Unit,
+    onLog: (QuestWithProgress) -> Unit,
+    onEdit: (Long) -> Unit,
+    onDuplicate: (Long) -> Unit,
+    onToggleActive: (Long) -> Unit,
+    onDelete: (QuestWithProgress) -> Unit,
+) {
+    val accent = section.categoryId?.let { id ->
+        section.items.firstOrNull()?.category?.accentId?.let { ClayPalette.accentById(it) }
+    } ?: ClayPalette.Lavender
+    val completed = section.items.count { it.isComplete }
+
+    ClayCard(
+        shape = ClayShape.Card,
+        elevation = 12.dp,
+        glowAlpha = 0.14f,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ClayDot(emoji = section.emoji, accent = accent, size = 34.dp)
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = section.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = ClayInk.Primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${section.items.size} ${if (section.items.size == 1) "quest" else "quests"}" +
+                        if (completed > 0) " · $completed done today" else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ClayInk.Muted,
+                    maxLines = 1,
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        section.items.forEachIndexed { index, item ->
+            if (index > 0) ClayDivider(verticalPadding = 0.dp)
+            QuestRow(
+                item = item,
+                onOpen = { onOpen(item.quest.id) },
+                onLog = { onLog(item) },
+                onEdit = { onEdit(item.quest.id) },
+                onDuplicate = { onDuplicate(item.quest.id) },
+                onToggleActive = { onToggleActive(item.quest.id) },
+                onDelete = { onDelete(item) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuestRow(
     item: QuestWithProgress,
     onOpen: () -> Unit,
     onLog: () -> Unit,
@@ -288,46 +500,36 @@ private fun QuestBoardCard(
     var menuOpen by remember { mutableStateOf(false) }
     val accent = accentFor(item)
     val quest = item.quest
+    val interaction = remember { MutableInteractionSource() }
 
-    ClayCard(
-        shape = ClayShape.Card,
-        elevation = if (quest.isActive) 13.dp else 7.dp,
-        glowAlpha = if (quest.isActive) 0.2f else 0.1f,
-        contentPadding = PaddingValues(16.dp),
-        onClick = onOpen,
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(ClayShape.Small)
+            .clickable(interactionSource = interaction, indication = null, onClick = onOpen)
+            .padding(vertical = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            ClayIconTile(
-                emoji = quest.emoji,
-                accent = accent,
-                size = 48.dp,
-            )
-            Spacer(Modifier.width(13.dp))
+            ClayDot(emoji = quest.emoji, accent = accent, size = 38.dp)
+            Spacer(Modifier.width(11.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = quest.title,
                     style = MaterialTheme.typography.titleSmall,
                     color = if (quest.isActive) ClayInk.Primary else ClayInk.Muted,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = buildString {
-                        append(item.category?.let { "${it.emoji} ${it.name}" } ?: "🗂️ Uncategorised")
-                        append(" · ")
-                        if (item.isLongTerm) {
-                            append("Long-term")
-                        } else {
-                            append(ScheduleKind.fromName(quest.scheduleKind).label)
-                        }
-                        append(" · ")
-                        append(com.irlrpg.app.domain.model.QuestDifficulty.fromName(quest.difficulty).label)
-                        append(" · ")
-                        append("${quest.xpReward} XP")
-                        if (item.isMultiStep) {
-                            append(" · ${item.stepsCompleted}/${item.stepsTotal} steps")
-                        }
+                        append(
+                            if (item.isLongTerm) "Long-term"
+                            else ScheduleKind.fromName(quest.scheduleKind).label
+                        )
+                        append(" · ${QuestDifficulty.fromName(quest.difficulty).label}")
+                        append(" · +${quest.xpReward} XP")
+                        if (item.isMultiStep) append(" · ${item.stepsCompleted}/${item.stepsTotal} steps")
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = ClayInk.Muted,
@@ -335,6 +537,12 @@ private fun QuestBoardCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            Spacer(Modifier.width(8.dp))
+
+            // Primary row action: log progress (or a tick once the target is met).
+            LogAction(complete = item.isComplete, accent = accent, onLog = onLog)
+
+            Spacer(Modifier.width(4.dp))
             Box {
                 ClayIconButton(
                     icon = Icons.Rounded.MoreVert,
@@ -349,6 +557,10 @@ private fun QuestBoardCard(
                     containerColor = ClayPalette.SurfaceCream,
                     shape = ClayShape.Medium,
                 ) {
+                    DropdownMenuItem(
+                        text = { Text("Open details", style = MaterialTheme.typography.bodyMedium) },
+                        onClick = { menuOpen = false; onOpen() },
+                    )
                     DropdownMenuItem(
                         text = { Text("Edit quest", style = MaterialTheme.typography.bodyMedium) },
                         onClick = { menuOpen = false; onEdit() },
@@ -380,91 +592,99 @@ private fun QuestBoardCard(
             }
         }
 
+        Spacer(Modifier.height(10.dp))
         if (quest.trackingKind != TrackingKind.Milestone.name || item.isComplete) {
-            Spacer(Modifier.height(12.dp))
             ClayProgressBar(
                 progress = item.fraction,
                 accent = if (item.isComplete) ClayPalette.Mint else accent,
-                height = 10.dp,
+                height = 9.dp,
             )
+            Spacer(Modifier.height(7.dp))
         }
-
-        Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = buildString {
-                    when {
-                        item.isMultiStep -> {
-                            append("${item.stepsCompleted} of ${item.stepsTotal} steps")
-                            append(" ")
-                            append(QuestProgress.periodLabel(quest))
-                        }
-                        quest.trackingKind == TrackingKind.Milestone.name ->
-                            append(if (item.isComplete) "Completed" else "One-off milestone")
-                        else -> {
-                            append("${item.progress.coerceAtMost(item.target)}/${item.target} ")
-                            append(quest.customUnit ?: "")
-                            append(" ")
-                            append(QuestProgress.periodLabel(quest))
-                        }
-                    }
-                    item.daysLeft?.let { days ->
-                        append(" · ")
-                        append(
-                            when {
-                                item.isComplete -> "done"
-                                days < 0 -> "${-days} days overdue"
-                                days == 0L -> "due today"
-                                else -> "$days days left"
-                            }
-                        )
-                    }
-                }.trim(),
+                text = progressSummary(item),
                 style = MaterialTheme.typography.labelSmall,
                 color = ClayInk.Secondary,
                 modifier = Modifier.weight(1f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
-            if (item.isComplete) {
-                Box(
-                    modifier = Modifier
-                        .clip(ClayShape.Pill)
-                        .background(ClayPalette.Mint.soft)
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Rounded.Check,
-                            contentDescription = null,
-                            tint = ClayPalette.Mint.deep,
-                            modifier = Modifier.size(15.dp),
-                        )
-                        Spacer(Modifier.width(5.dp))
-                        Text(
-                            text = "Done",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = ClayPalette.Mint.deep,
-                        )
-                    }
-                }
-            } else if (quest.isActive) {
-                ClayButton(
-                    text = if (quest.trackingKind == TrackingKind.Milestone.name) "Complete" else "Log progress",
-                    onClick = onLog,
-                    accent = accent,
-                    height = 40.dp,
-                    style = ClayButtonStyle.Soft,
-                )
-            } else {
-                ClayButton(
-                    text = "Paused",
-                    onClick = onToggleActive,
-                    accent = ClayPalette.Sky,
-                    height = 40.dp,
-                    style = ClayButtonStyle.Soft,
+            if (!quest.isActive) {
+                ClayIconPill(text = "Paused", accent = ClayPalette.Sky, emoji = "⏸️")
+            } else if (item.isOverdue) {
+                ClayIconPill(text = "Overdue", accent = ClayPalette.Peach, emoji = "⏰")
+            } else if (item.isComplete) {
+                ClayIconPill(text = "Done", accent = ClayPalette.Mint, emoji = "✅", emphasised = true)
+            } else if (item.daysLeft != null) {
+                ClayIconPill(
+                    text = if (item.daysLeft!! <= 0L) "Due today" else "${item.daysLeft}d left",
+                    accent = ClayPalette.Butter,
+                    emoji = "🗓️",
                 )
             }
         }
+    }
+}
+
+/** Thin wrapper that keeps the log affordance visually consistent with the dashboard. */
+@Composable
+private fun LogAction(
+    complete: Boolean,
+    accent: com.irlrpg.app.ui.theme.ClayAccent,
+    onLog: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(ClayShape.Pill)
+            .background(if (complete) ClayPalette.Mint.soft else accent.soft)
+            .clickable(
+                enabled = !complete,
+                interactionSource = interaction,
+                indication = null,
+                onClick = onLog,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (complete) {
+            Icon(
+                imageVector = Icons.Rounded.Check,
+                contentDescription = "Completed",
+                tint = ClayPalette.Mint.deep,
+                modifier = Modifier.size(18.dp),
+            )
+        } else {
+            Text(text = "＋", color = accent.deep, fontSize = 17.sp)
+        }
+    }
+}
+
+private fun progressSummary(item: QuestWithProgress): String = buildString {
+    when {
+        item.isMultiStep -> {
+            append("${item.stepsCompleted} of ${item.stepsTotal} steps")
+            append(" · ${QuestProgress.periodLabel(item.quest)}")
+        }
+        item.quest.trackingKind == TrackingKind.Milestone.name ->
+            append(if (item.isComplete) "Milestone reached" else "One-off milestone")
+        else -> {
+            append("${item.progress.coerceAtMost(item.target)}/${item.target} ")
+            append(item.quest.customUnit ?: "")
+            append(" · ${QuestProgress.periodLabel(item.quest)}")
+        }
+    }
+    item.daysLeft?.let { days ->
+        append(" · ")
+        append(
+            when {
+                item.isComplete -> "done"
+                days < 0 -> "${-days} days overdue"
+                days == 0L -> "due today"
+                else -> "$days days left"
+            }
+        )
     }
 }
 

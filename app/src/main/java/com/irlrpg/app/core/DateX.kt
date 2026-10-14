@@ -30,6 +30,10 @@ object DateX {
     fun shortDayLabel(date: LocalDate): String =
         date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()).take(2)
 
+    /** Three-letter month name, e.g. "Sep" — used by the yearly chart. */
+    fun shortMonthLabel(date: LocalDate): String =
+        date.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())
+
     fun dayAndMonth(date: LocalDate): String {
         val month: Month = date.month
         return "${date.dayOfMonth} ${month.getDisplayName(TextStyle.SHORT, Locale.getDefault())}"

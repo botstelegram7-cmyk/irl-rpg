@@ -137,6 +137,86 @@ object MetricsAggregator {
         )
     }
 
+
+    /** Number of distinct days with at least one completion inside a range. */
+    fun activeDaysBetween(logs: List<QuestLogEntity>, from: LocalDate, to: LocalDate): Int {
+        val start = from.toEpochDay()
+        val end = to.toEpochDay()
+        return logs.filter { it.isCompletion && it.epochDay in start..end }
+            .map { it.epochDay }
+            .toSet()
+            .size
+    }
+
+    /** Number of log rows (partial entries included) inside a range. */
+    fun entriesBetween(logs: List<QuestLogEntity>, from: LocalDate, to: LocalDate): Int {
+        val start = from.toEpochDay()
+        val end = to.toEpochDay()
+        return logs.count { it.epochDay in start..end }
+    }
+
+    /**
+     * Fixed-width buckets inside a range, used by the month and year charts.
+     * Labels are day spans ("1–7") or month names ("Jan") depending on the step.
+     */
+    fun buckets(
+        logs: List<QuestLogEntity>,
+        questsById: Map<Long, QuestEntity>,
+        from: LocalDate,
+        toInclusive: LocalDate,
+        stepDays: Int,
+        label: (LocalDate, LocalDate) -> String,
+    ): List<WeekDay> {
+        val out = mutableListOf<WeekDay>()
+        var cursor = from
+        while (!cursor.isAfter(toInclusive)) {
+            val rawEnd = cursor.plusDays(stepDays.toLong() - 1)
+            val end = if (rawEnd.isAfter(toInclusive)) toInclusive else rawEnd
+            val start = cursor.toEpochDay()
+            val endDay = end.toEpochDay()
+            val rows = logs.filter { it.epochDay in start..endDay }
+            out += WeekDay(
+                date = cursor,
+                label = label(cursor, end),
+                xp = rows.sumOf { it.xpEarned },
+                completions = rows.count { it.isCompletion },
+                minutes = rows.sumOf { minutesOf(it, questsById[it.questId]) },
+            )
+            cursor = end.plusDays(1)
+        }
+        return out
+    }
+
+    /**
+     * One bucket per calendar month of [yearStart], up to and including the month
+     * that contains [today] — no empty future months are invented.
+     */
+    fun monthsOfYear(
+        logs: List<QuestLogEntity>,
+        questsById: Map<Long, QuestEntity>,
+        yearStart: LocalDate,
+        today: LocalDate,
+    ): List<WeekDay> {
+        val out = mutableListOf<WeekDay>()
+        var cursor: LocalDate = yearStart
+        while (!cursor.isAfter(today) && out.size < 12) {
+            val monthEnd = cursor.plusMonths(1).minusDays(1)
+            val end = if (monthEnd.isAfter(today)) today else monthEnd
+            val start = cursor.toEpochDay()
+            val endDay = end.toEpochDay()
+            val rows = logs.filter { it.epochDay in start..endDay }
+            out += WeekDay(
+                date = cursor,
+                label = DateX.shortMonthLabel(cursor),
+                xp = rows.sumOf { it.xpEarned },
+                completions = rows.count { it.isCompletion },
+                minutes = rows.sumOf { minutesOf(it, questsById[it.questId]) },
+            )
+            cursor = cursor.plusMonths(1)
+        }
+        return out
+    }
+
     /** Pages/chapters read, derived from quests whose unit is Pages. */
     fun pagesRead(logs: List<QuestLogEntity>, questsById: Map<Long, QuestEntity>): Long =
         logs.filter { questsById[it.questId]?.let { q -> UnitKind.fromName(q.unit) == UnitKind.Pages } == true }

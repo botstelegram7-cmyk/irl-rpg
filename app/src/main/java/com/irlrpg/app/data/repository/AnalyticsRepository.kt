@@ -10,7 +10,9 @@ import com.irlrpg.app.data.local.entity.QuestEntity
 import com.irlrpg.app.data.local.entity.QuestLogEntity
 import com.irlrpg.app.domain.game.PeriodKeys
 import com.irlrpg.app.domain.game.StreakCalculator
+import com.irlrpg.app.domain.model.AnalyticsRange
 import com.irlrpg.app.domain.model.AnalyticsState
+import com.irlrpg.app.domain.model.RangeSummary
 import com.irlrpg.app.domain.model.ScheduleKind
 import com.irlrpg.app.domain.model.StreakInfo
 import com.irlrpg.app.domain.model.TrackingKind
@@ -73,9 +75,88 @@ class AnalyticsRepository(
             }
         }
 
+        val todayMetrics = MetricsAggregator.dayMetrics(logs, today, questsById)
+        val yesterdayMetrics = MetricsAggregator.dayMetrics(logs, today.minusDays(1), questsById)
+
+        // ---- per-range summaries (all arithmetic on recorded rows) ----------
+        val weekEnd = weekStart.plusDays(6)
+        val prevWeekStart = weekStart.minusDays(7)
+        val prevWeekEnd = weekStart.minusDays(1)
+        val monthEnd = monthStart.plusMonths(1).minusDays(1)
+        val prevMonthStart = monthStart.minusMonths(1)
+        val prevMonthEnd = monthStart.minusDays(1)
+        val yearEnd = yearStart.plusYears(1).minusDays(1)
+        val prevYearStart = yearStart.minusYears(1)
+        val prevYearEnd = yearStart.minusDays(1)
+
+        val monthBuckets = MetricsAggregator.buckets(
+            logs = logs,
+            questsById = questsById,
+            from = monthStart,
+            toInclusive = today,
+            stepDays = 7,
+            label = { start, end -> "${start.dayOfMonth}–${end.dayOfMonth}" },
+        )
+        val yearBuckets = MetricsAggregator.monthsOfYear(logs, questsById, yearStart, today)
+
+        val ranges = mapOf(
+            AnalyticsRange.Today to RangeSummary(
+                xp = todayMetrics.xp,
+                completions = todayMetrics.completions,
+                entries = MetricsAggregator.entriesBetween(logs, today, today),
+                minutes = todayMetrics.minutes,
+                activeDays = if (todayMetrics.completions > 0) 1 else 0,
+                previousXp = yesterdayMetrics.xp,
+                previousCompletions = yesterdayMetrics.completions,
+                previousLabel = "yesterday",
+                bucketCaption = "Entries are stored per day, so there is no hourly split to show",
+                buckets = emptyList(),
+                categories = MetricsAggregator.breakdown(logs, questsById, categories, today, today),
+            ),
+            AnalyticsRange.Week to RangeSummary(
+                xp = week.sumOf { it.xp },
+                completions = week.sumOf { it.completions },
+                entries = MetricsAggregator.entriesBetween(logs, weekStart, weekEnd),
+                minutes = week.sumOf { it.minutes },
+                activeDays = MetricsAggregator.activeDaysBetween(logs, weekStart, weekEnd),
+                previousXp = MetricsAggregator.xpBetween(logs, prevWeekStart, prevWeekEnd),
+                previousCompletions = MetricsAggregator.completionsBetween(logs, prevWeekStart, prevWeekEnd),
+                previousLabel = "last week",
+                bucketCaption = "XP per day, Monday to Sunday",
+                buckets = week,
+                categories = MetricsAggregator.breakdown(logs, questsById, categories, weekStart, weekEnd),
+            ),
+            AnalyticsRange.Month to RangeSummary(
+                xp = MetricsAggregator.xpBetween(logs, monthStart, today),
+                completions = MetricsAggregator.completionsBetween(logs, monthStart, today),
+                entries = MetricsAggregator.entriesBetween(logs, monthStart, today),
+                minutes = MetricsAggregator.minutesBetween(logs, questsById, monthStart, today),
+                activeDays = MetricsAggregator.activeDaysBetween(logs, monthStart, today),
+                previousXp = MetricsAggregator.xpBetween(logs, prevMonthStart, prevMonthEnd),
+                previousCompletions = MetricsAggregator.completionsBetween(logs, prevMonthStart, prevMonthEnd),
+                previousLabel = "last month",
+                bucketCaption = "XP per week of this month",
+                buckets = monthBuckets,
+                categories = MetricsAggregator.breakdown(logs, questsById, categories, monthStart, today),
+            ),
+            AnalyticsRange.Year to RangeSummary(
+                xp = MetricsAggregator.xpBetween(logs, yearStart, today),
+                completions = MetricsAggregator.completionsBetween(logs, yearStart, today),
+                entries = MetricsAggregator.entriesBetween(logs, yearStart, today),
+                minutes = MetricsAggregator.minutesBetween(logs, questsById, yearStart, today),
+                activeDays = MetricsAggregator.activeDaysBetween(logs, yearStart, today),
+                previousXp = MetricsAggregator.xpBetween(logs, prevYearStart, prevYearEnd),
+                previousCompletions = MetricsAggregator.completionsBetween(logs, prevYearStart, prevYearEnd),
+                previousLabel = "last year",
+                bucketCaption = "XP per month of this year",
+                buckets = yearBuckets,
+                categories = MetricsAggregator.breakdown(logs, questsById, categories, yearStart, today),
+            ),
+        )
+
         return AnalyticsState(
-            today = MetricsAggregator.dayMetrics(logs, today, questsById),
-            yesterday = MetricsAggregator.dayMetrics(logs, today.minusDays(1), questsById),
+            today = todayMetrics,
+            yesterday = yesterdayMetrics,
             week = week,
             weekXp = week.sumOf { it.xp },
             weekCompletions = week.sumOf { it.completions },
@@ -98,6 +179,7 @@ class AnalyticsRepository(
                 completedToday.toFloat() / scheduledToday.size.toFloat()
             },
             consistencyRate = StreakCalculator.consistencyRate(activeDays, lifetime.firstDay, today),
+            ranges = ranges,
         )
     }
 }

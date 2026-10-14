@@ -22,6 +22,28 @@ IRL RPG is not a habit tracker with XP sprinkled on top. It is a personal progre
 - **Your data stays yours** — a local SQLite database, no account, no ads, no network calls, no paid APIs.
 - **It looks and feels premium** — a warm ivory Claymorphism design system with pastel clay surfaces, soft ambient shadows, tactile buttons and hand-drawn charts (no 3D engine, no heavy assets).
 
+## Step 3 — UI polish & UX improvements
+
+Step 3 does not rebuild anything: it refines the existing Claymorphism design system and reworks every
+screen on top of it. The database stays at version 2, no user data is touched, and every Step 1/2 feature
+still works.
+
+- **Two-tier surface rule** — one raised clay card per region, flat tinted panels inside it. The
+  card-in-card nesting that made long lists feel repetitive is gone (new `ClayPanel`, `ClayMiniStat`,
+  `ClayIconPill`, `ClayDot`, `ClayDropdownChip`).
+- **Dimensional 2D artwork** — the avatar is now a layered clay pedestal illustration drawn with Canvas
+  gradients (highlight, contact shadow, level ring, idle bob). No 3D engine, no textures, ~2 KB of code,
+  and the ring colour follows the equipped cosmetic frame so future cosmetics evolve the artwork for free.
+- **Home Dashboard** — character summary first, one prominent *New quest* action, a four-up quiet stat row,
+  flat quest rows, a compact weekly chart, milestones only when real completions exist, and no duplicated
+  analytics.
+- **Character, Skills, Analytics, Quest board, Achievements, History** — all reorganised into grouped
+  sections with flat rows, range-scoped analytics (today/week/month/year with week-slice and calendar-month
+  series, all computed from recorded rows), a compact filter bar instead of chip rows, colour-coded core
+  skills, and compact empty states everywhere.
+- **Verification** — 49/49 unit tests pass (41 from Steps 1–2 unchanged + 8 new analytics range tests),
+  including the v1→v2 Room migration guard.
+
 ## Step 2 — what is included
 
 Everything in Step 1 still works exactly as before; Step 2 adds depth without changing a single stored XP value.
@@ -137,10 +159,9 @@ Requirements: **JDK 17**, Android SDK **API 35** (build-tools 35.0.0), Gradle 8.
 git clone https://github.com/botstelegram7-cmyk/irl-rpg.git
 cd irl-rpg
 
-# Prebuilt APK (no build needed): prebuilt/app-debug.apk
-# or download the Step 2 build directly:
-#   https://github.com/botstelegram7-cmyk/irl-rpg/releases/tag/v1.0-step2
-#   (irl-rpg-step2-debug.apk · 11,053,229 bytes · sha256 40be0838ef89348139ec5ddd622b97091446771c85f4b1a2fc372c26a3c93963)
+# Prebuilt APK (no build needed): prebuilt/app-debug.apk   (Step 3 build)
+# or download the Step 3 build directly:
+#   https://github.com/botstelegram7-cmyk/irl-rpg/releases/tag/v1.0-step3
 
 # Debug APK → app/build/outputs/apk/debug/app-debug.apk
 ./gradlew assembleDebug
@@ -170,7 +191,7 @@ Run with `./gradlew testDebugUnitTest` (report at `app/build/reports/tests/testD
 
 ## Design system
 
-Full details in [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md): palette tokens, clay elevation recipe, component inventory and motion rules. Architecture notes live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the Step 1 delivery report in [`docs/DELIVERY.md`](docs/DELIVERY.md).
+Full details in [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md): palette tokens, clay elevation recipe, component inventory and motion rules. Architecture notes live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Delivery reports: [`docs/DELIVERY.md`](docs/DELIVERY.md) (Step 1), [`docs/DELIVERY_STEP2.md`](docs/DELIVERY_STEP2.md) (Step 2), [`docs/DELIVERY_STEP3.md`](docs/DELIVERY_STEP3.md) (Step 3 — UI polish).
 
 ## Roadmap
 

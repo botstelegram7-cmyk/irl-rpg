@@ -151,6 +151,35 @@ data class RecentCompletion(
     val levelUp: Boolean,
 )
 
+/** The four time ranges the analytics screen exposes. */
+enum class AnalyticsRange(val label: String) {
+    Today("Today"),
+    Week("Week"),
+    Month("Month"),
+    Year("Year"),
+}
+
+/**
+ * Everything the analytics screen needs for one range. [previousXp] and
+ * [previousCompletions] come from the equivalent preceding period (yesterday,
+ * last week, last month, last year) so comparisons are always like-for-like.
+ * [buckets] is the chart series for the range and is empty when no honest
+ * breakdown exists (there is no hourly data — entries are stored per day).
+ */
+data class RangeSummary(
+    val xp: Int,
+    val completions: Int,
+    val entries: Int,
+    val minutes: Int,
+    val activeDays: Int,
+    val previousXp: Int,
+    val previousCompletions: Int,
+    val previousLabel: String,
+    val bucketCaption: String,
+    val buckets: List<WeekDay> = emptyList(),
+    val categories: List<CategoryBreakdown> = emptyList(),
+)
+
 /** Analytics screen payload. All values are derived from recorded logs. */
 data class AnalyticsState(
     val today: DayMetrics,
@@ -171,6 +200,8 @@ data class AnalyticsState(
     val readingPages: Long,
     val completionRate: Float,
     val consistencyRate: Float,
+    /** Per-range summaries (Today / Week / Month / Year). */
+    val ranges: Map<AnalyticsRange, RangeSummary> = emptyMap(),
 ) {
     val weekOverWeekDelta: Int get() = weekXp - lastWeekXp
 }

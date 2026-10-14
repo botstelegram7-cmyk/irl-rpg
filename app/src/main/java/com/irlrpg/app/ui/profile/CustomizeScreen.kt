@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.irlrpg.app.ui.components.ClayToast
-import com.irlrpg.app.ui.design.ClayAvatar
+import com.irlrpg.app.ui.design.ClayAvatarPedestal
 import com.irlrpg.app.ui.design.ClayCard
 import com.irlrpg.app.ui.design.ClayProgressBar
 import com.irlrpg.app.ui.design.ClayScaffold
@@ -54,6 +54,7 @@ fun CustomizeScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val equippedFrame = state.frames.firstOrNull { it.selected }?.item
 
     ClayScaffold(
         topBar = {
@@ -80,12 +81,17 @@ fun CustomizeScreen(
                     contentPadding = PaddingValues(18.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        ClayAvatar(
-                            emoji = "🧭",
-                            level = state.level,
-                            progress = 0f,
+                        // The preview uses the same artwork component as the
+                        // character screen, so a future frame cosmetic changes
+                        // this visual with no extra code.
+                        ClayAvatarPedestal(
+                            emoji = equippedFrame?.emoji ?: "🧭",
                             accent = ClayPalette.Lavender,
-                            avatarSize = 78.dp,
+                            frameAccent = equippedFrame?.let { ClayPalette.accentById(it.accentId) } ?: ClayPalette.Lavender,
+                            progress = 0f,
+                            size = 108.dp,
+                            animate = false,
+                            badge = "LV ${state.level}",
                         )
                         Spacer(Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -100,7 +106,14 @@ fun CustomizeScreen(
                                 style = MaterialTheme.typography.labelMedium,
                                 color = ClayPalette.Lavender.deep,
                             )
-                            Spacer(Modifier.height(10.dp))
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = "${state.unlockedCount} of ${state.totalCount} rewards unlocked · all from recorded activity",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ClayInk.Muted,
+                                maxLines = 2,
+                            )
+                            Spacer(Modifier.height(8.dp))
                             ClayProgressBar(
                                 progress = if (state.totalCount == 0) 0f
                                 else state.unlockedCount.toFloat() / state.totalCount,

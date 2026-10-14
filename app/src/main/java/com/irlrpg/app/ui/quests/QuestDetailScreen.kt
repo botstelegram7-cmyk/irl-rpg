@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.irlrpg.app.core.DateX
 import com.irlrpg.app.data.local.entity.QuestLogEntity
+import com.irlrpg.app.domain.model.QuestDifficulty
 import com.irlrpg.app.domain.model.ScheduleKind
 import com.irlrpg.app.domain.model.TrackingKind
 import com.irlrpg.app.domain.model.UnitKind
@@ -48,6 +49,7 @@ import com.irlrpg.app.ui.design.ClayButton
 import com.irlrpg.app.ui.design.ClayButtonStyle
 import com.irlrpg.app.ui.design.ClayCard
 import com.irlrpg.app.ui.design.ClayIconButton
+import com.irlrpg.app.ui.design.ClayIconPill
 import com.irlrpg.app.ui.design.ClayIconTile
 import com.irlrpg.app.ui.design.ClayProgressBar
 import com.irlrpg.app.ui.design.ClayScaffold
@@ -177,7 +179,28 @@ fun QuestDetailScreen(
                                 text = "${quest.xpReward} XP · ${quest.attributeKind}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = ClayInk.Muted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
+                            Spacer(Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                ClayIconPill(
+                                    text = QuestDifficulty.fromName(quest.difficulty).label,
+                                    accent = accent,
+                                    emoji = "🎚️",
+                                )
+                                state.progress?.daysLeft?.let { days ->
+                                    ClayIconPill(
+                                        text = when {
+                                            days < 0 -> "${-days}d overdue"
+                                            days == 0L -> "Due today"
+                                            else -> "${days}d left"
+                                        },
+                                        accent = if (days < 0) ClayPalette.Peach else ClayPalette.Butter,
+                                        emoji = "🗓️",
+                                    )
+                                }
+                            }
                         }
                     }
                     if (quest.notes != null) {

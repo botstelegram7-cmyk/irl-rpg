@@ -32,28 +32,46 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.irlrpg.app.data.local.entity.AttributeEntity
+import com.irlrpg.app.domain.model.AttributeKind
 import com.irlrpg.app.ui.components.ClayConfirmDialog
 import com.irlrpg.app.ui.components.ClayToast
 import com.irlrpg.app.ui.design.ClayButton
 import com.irlrpg.app.ui.design.ClayButtonStyle
 import com.irlrpg.app.ui.design.ClayCard
 import com.irlrpg.app.ui.design.ClayChip
-import com.irlrpg.app.ui.design.ClayEmptyState
+import com.irlrpg.app.ui.design.ClayDivider
+import com.irlrpg.app.ui.design.ClayDot
 import com.irlrpg.app.ui.design.ClayIconButton
-import com.irlrpg.app.ui.design.ClayIconTile
+import com.irlrpg.app.ui.design.ClayMiniStat
+import com.irlrpg.app.ui.design.ClayPanel
 import com.irlrpg.app.ui.design.ClayProgressBar
 import com.irlrpg.app.ui.design.ClayScaffold
-import com.irlrpg.app.ui.design.ClaySectionHeader
+import com.irlrpg.app.ui.design.ClaySectionTitle
 import com.irlrpg.app.ui.design.ClayTextField
 import com.irlrpg.app.ui.design.ClayTopBar
 import com.irlrpg.app.ui.quests.EmojiRow
+import com.irlrpg.app.ui.theme.ClayAccent
 import com.irlrpg.app.ui.theme.ClayInk
 import com.irlrpg.app.ui.theme.ClayPalette
 import com.irlrpg.app.ui.theme.ClayShape
 
+/**
+ * Skills screen.
+ *
+ * Two clearly separated groups — the six core attributes and the player's own
+ * skills — each rendered as flat rows inside a single card, which removes the
+ * "one raised card per skill" wall. Every number and bar here is derived from
+ * the quest log (XP, completions, active quests); nothing is decorative.
+ *
+ * The list layout is deliberately two-level (group → row) so a future
+ * interactive tree view can replace the "Skills" section without touching the
+ * header, dialogs, or data flow.
+ */
 @Composable
 fun SkillsScreen(
     viewModel: SkillsViewModel,
@@ -65,6 +83,12 @@ fun SkillsScreen(
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<AttributeEntity?>(null) }
     var pendingDelete by remember { mutableStateOf<AttributeEntity?>(null) }
+
+    val core = state.rows.filter { it.attribute.isBuiltIn }.sortedByDescending { it.xp }
+    val custom = state.rows.filterNot { it.attribute.isBuiltIn }.sortedByDescending { it.xp }
+    val totalXp = state.rows.sumOf { it.xp }
+    val totalEntries = state.rows.sumOf { it.completions }
+    val best = state.rows.maxByOrNull { it.xp }
 
     ClayScaffold(
         topBar = {
@@ -84,25 +108,41 @@ fun SkillsScreen(
                 top = padding.calculateTopPadding() + 4.dp,
                 bottom = padding.calculateBottomPadding() + 32.dp,
             ),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                ClayCard(shape = ClayShape.Card, elevation = 14.dp) {
-                    val totalXp = state.rows.sumOf { it.xp }
-                    val top = state.rows.maxByOrNull { it.xp }
-                    ClaySectionHeader(
+                ClayCard(
+                    shape = ClayShape.Card,
+                    elevation = 14.dp,
+                    glowAlpha = 0.2f,
+                    contentPadding = PaddingValues(18.dp),
+                ) {
+                    ClaySectionTitle(
                         title = "Skill profile",
-                        subtitle = "Built from ${state.rows.sumOf { it.completions }} completed entries",
+                        eyebrow = "Recorded",
+                        caption = "Recomputed from ${totalEntries} completed entries",
                     )
                     Spacer(Modifier.height(14.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        MiniTile("⚡", "$totalXp", "XP in skills", ClayPalette.Butter, Modifier.weight(1f))
-                        MiniTile(
-                            "🏅",
-                            top?.attribute?.emoji ?: "—",
-                            top?.attribute?.name ?: "No data yet",
-                            ClayPalette.Mint,
-                            Modifier.weight(1f),
+                    Row {
+                        ClayMiniStat(
+                            value = "$totalXp",
+                            label = "XP in skills",
+                            emoji = "⚡",
+                            accent = ClayPalette.Butter,
+                            modifier = Modifier.weight(1f),
+                        )
+                        ClayMiniStat(
+                            value = "${state.rows.size}",
+                            label = "Skills tracked",
+                            emoji = "🧠",
+                            accent = ClayPalette.Lavender,
+                            modifier = Modifier.weight(1f),
+                        )
+                        ClayMiniStat(
+                            value = best?.attribute?.emoji ?: "—",
+                            label = best?.attribute?.name ?: "No data yet",
+                            accent = ClayPalette.Mint,
+                            modifier = Modifier.weight(1f),
                         )
                     }
                     Spacer(Modifier.height(16.dp))
@@ -127,23 +167,77 @@ fun SkillsScreen(
                 }
             }
 
-            if (state.rows.isEmpty() && !state.loading) {
+            if (core.isNotEmpty()) {
                 item {
-                    ClayEmptyState(
-                        emoji = "🧠",
-                        title = "No skills yet",
-                        message = "Skills appear automatically from the six core attributes — add your own if you want to track something specific like guitar or chess.",
-                        actionLabel = "Add a skill",
-                        onAction = { showAdd = true },
+                    SkillGroup(
+                        title = "Core skills",
+                        eyebrow = "Built in",
+                        caption = "Six universal attributes every quest can feed into",
+                        rows = core,
+                        maxXp = state.maxXp,
+                        showShare = true,
+                        onEdit = { editing = it },
+                        onDelete = { pendingDelete = it },
                     )
                 }
-            } else {
-                items(state.rows, key = { it.attribute.id }) { row ->
-                    SkillCard(
-                        row = row,
-                        onEdit = { editing = row.attribute },
-                        onDelete = { pendingDelete = row.attribute },
+            }
+
+            item {
+                if (custom.isEmpty()) {
+                    ClayPanel(
+                        shape = ClayShape.Card,
+                        tint = ClayPalette.SurfaceCream,
+                        contentPadding = PaddingValues(18.dp),
+                        onClick = { showAdd = true },
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ClayDot(emoji = "✨", accent = ClayPalette.Lavender, size = 38.dp)
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "No custom skills yet",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = ClayInk.Primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = "Track something specific — guitar, chess, a language, a side project.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ClayInk.Muted,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    SkillGroup(
+                        title = "Your skills",
+                        eyebrow = "Custom",
+                        caption = "Skills you added yourself — remove them any time",
+                        rows = custom,
+                        maxXp = state.maxXp,
+                        showShare = totalXp > 0,
+                        onEdit = { editing = it },
+                        onDelete = { pendingDelete = it },
                     )
+                }
+            }
+
+            if (state.rows.isEmpty() && !state.loading) {
+                item {
+                    ClayPanel(
+                        shape = ClayShape.Card,
+                        tint = ClayPalette.SurfaceMuted.copy(alpha = 0.6f),
+                        contentPadding = PaddingValues(16.dp),
+                    ) {
+                        Text(
+                            text = "Skills appear as soon as your first quest is completed. Add a custom skill to start tracking something new right away.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ClayInk.Muted,
+                        )
+                    }
                 }
             }
         }
@@ -193,120 +287,147 @@ fun SkillsScreen(
     ClayToast(message = message, onShown = viewModel::consumeMessage, bottomPadding = 104.dp)
 }
 
+/** One group of skills: a single card with flat rows and hairline separators. */
 @Composable
-private fun MiniTile(
-    emoji: String,
-    value: String,
-    label: String,
-    accent: com.irlrpg.app.ui.theme.ClayAccent,
-    modifier: Modifier = Modifier,
+private fun SkillGroup(
+    title: String,
+    eyebrow: String,
+    caption: String,
+    rows: List<SkillRow>,
+    maxXp: Int,
+    showShare: Boolean,
+    onEdit: (AttributeEntity) -> Unit,
+    onDelete: (AttributeEntity) -> Unit,
 ) {
-    Column(
-        modifier = modifier
-            .clip(ClayShape.Small)
-            .background(accent.soft.copy(alpha = 0.6f))
-            .padding(12.dp),
+    ClayCard(
+        shape = ClayShape.Card,
+        elevation = 12.dp,
+        glowAlpha = 0.14f,
+        contentPadding = PaddingValues(18.dp),
     ) {
-        Text(text = emoji, style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleMedium,
-            color = ClayInk.Primary,
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = ClayInk.Muted,
-        )
+        ClaySectionTitle(title = title, eyebrow = eyebrow, caption = caption)
+        Spacer(Modifier.height(6.dp))
+        rows.forEachIndexed { index, row ->
+            if (index > 0) ClayDivider(verticalPadding = 0.dp)
+            SkillRowItem(
+                row = row,
+                maxXp = maxXp,
+                showShare = showShare,
+                onEdit = { onEdit(row.attribute) },
+                onDelete = { onDelete(row.attribute) },
+            )
+        }
     }
 }
 
 @Composable
-private fun SkillCard(
+private fun SkillRowItem(
     row: SkillRow,
+    maxXp: Int,
+    showShare: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val accent = ClayPalette.accentById(row.attribute.accentId)
+    val accent = accentForSkill(row.attribute)
+    // Bar length is relative to the strongest skill — a real comparison between
+    // recorded totals, never an invented target.
+    val bar = if (maxXp <= 0) 0f else (row.xp.toFloat() / maxXp.toFloat()).coerceIn(0f, 1f)
 
-    ClayCard(shape = ClayShape.Card, elevation = 12.dp) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            ClayIconTile(emoji = row.attribute.emoji, accent = accent, size = 48.dp)
-            Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = row.attribute.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = ClayInk.Primary,
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ClayDot(emoji = row.attribute.emoji, accent = accent, size = 42.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = row.attribute.name,
+                style = MaterialTheme.typography.titleSmall,
+                color = ClayInk.Primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = buildString {
+                    append("${row.xp} XP")
+                    append(" · ${row.completions} ${if (row.completions == 1) "completion" else "completions"}")
+                    append(
+                        when {
+                            row.activeQuestCount > 0 -> " · ${row.activeQuestCount} active"
+                            row.questCount > 0 -> " · ${row.questCount} quests"
+                            else -> " · no quests yet"
+                        }
                     )
-                    if (row.attribute.isBuiltIn) {
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "core",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = ClayInk.Faint,
-                        )
-                    }
-                }
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = ClayInk.Muted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(7.dp))
+            ClayProgressBar(progress = bar, accent = accent, height = 8.dp)
+            if (showShare && row.xp > 0) {
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "${row.activeQuestCount} active ${if (row.activeQuestCount == 1) "quest" else "quests"} · ${row.completions} completions",
+                    text = "${(row.share * 100).toInt()}% of recorded skill XP",
                     style = MaterialTheme.typography.labelSmall,
-                    color = ClayInk.Muted,
+                    color = ClayInk.Faint,
+                    maxLines = 1,
                 )
-            }
-            Box {
-                ClayIconButton(
-                    icon = Icons.Rounded.MoreVert,
-                    onClick = { menuOpen = true },
-                    contentDescription = "Skill options",
-                    accent = accent,
-                    size = 38.dp,
-                )
-                DropdownMenu(
-                    expanded = menuOpen,
-                    onDismissRequest = { menuOpen = false },
-                    containerColor = ClayPalette.SurfaceCream,
-                    shape = ClayShape.Medium,
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Rename", style = MaterialTheme.typography.bodyMedium) },
-                        onClick = { menuOpen = false; onEdit() },
-                    )
-                    if (!row.attribute.isBuiltIn) {
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    "Remove",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = ClayPalette.Blush.deep,
-                                )
-                            },
-                            onClick = { menuOpen = false; onDelete() },
-                        )
-                    }
-                }
             }
         }
-        Spacer(Modifier.height(14.dp))
-        ClayProgressBar(progress = row.share, accent = accent, height = 10.dp)
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "${row.xp} XP",
-                style = MaterialTheme.typography.labelMedium,
-                color = accent.deep,
+        Spacer(Modifier.width(8.dp))
+        Box {
+            ClayIconButton(
+                icon = Icons.Rounded.MoreVert,
+                onClick = { menuOpen = true },
+                contentDescription = "Skill options",
+                accent = accent,
+                size = 38.dp,
             )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "${(row.share * 100).toInt()}% of your skill XP",
-                style = MaterialTheme.typography.labelSmall,
-                color = ClayInk.Faint,
-            )
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                containerColor = ClayPalette.SurfaceCream,
+                shape = ClayShape.Medium,
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Rename", style = MaterialTheme.typography.bodyMedium) },
+                    onClick = { menuOpen = false; onEdit() },
+                )
+                if (!row.attribute.isBuiltIn) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                "Remove",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ClayPalette.Blush.deep,
+                            )
+                        },
+                        onClick = { menuOpen = false; onDelete() },
+                    )
+                }
+            }
         }
     }
+}
+
+/**
+ * Core attributes get a fixed colour each, so the same skill always reads in the
+ * same colour across dashboard, skills and analytics. Custom skills use the
+ * colour chosen by the player.
+ */
+private fun accentForSkill(attribute: AttributeEntity): ClayAccent = when (attribute.attributeKind) {
+    AttributeKind.Strength.name -> ClayPalette.Peach
+    AttributeKind.Intellect.name -> ClayPalette.Sky
+    AttributeKind.Focus.name -> ClayPalette.Lavender
+    AttributeKind.Vitality.name -> ClayPalette.Mint
+    AttributeKind.Creativity.name -> ClayPalette.Butter
+    AttributeKind.Discipline.name -> ClayPalette.Blush
+    else -> ClayPalette.accentById(attribute.accentId)
 }
 
 @Composable
@@ -321,6 +442,7 @@ private fun SkillDialog(
     var name by remember { mutableStateOf(initialName) }
     var emoji by remember { mutableStateOf(initialEmoji) }
     var accentId by remember { mutableStateOf(initialAccent) }
+    val suggestions = listOf("Guitar" to "🎸", "Chess" to "♟️", "Spanish" to "🇪🇸", "Drawing" to "🖌️", "Cooking" to "🍳")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -342,6 +464,29 @@ private fun SkillDialog(
                     placeholder = "e.g. Guitar, Chess, Spanish",
                     accent = ClayPalette.accentById(accentId),
                 )
+                if (initialName.isBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = "Quick start",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ClayInk.Faint,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(suggestions) { (label, suggestionEmoji) ->
+                            ClayChip(
+                                text = label,
+                                selected = name.equals(label, ignoreCase = true),
+                                onClick = {
+                                    name = label
+                                    emoji = suggestionEmoji
+                                },
+                                accent = ClayPalette.accentById(accentId),
+                                leadingEmoji = suggestionEmoji,
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.height(14.dp))
                 Text(
                     text = "Icon",
@@ -351,6 +496,12 @@ private fun SkillDialog(
                 )
                 EmojiRow(selected = emoji, onSelect = { emoji = it })
                 Spacer(Modifier.height(14.dp))
+                Text(
+                    text = "Colour",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = ClayInk.Secondary,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+                )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(ClayPalette.accentRotation.map { ClayPalette.accentIdOf(it) }) { id ->
                         ClayChip(
@@ -369,6 +520,7 @@ private fun SkillDialog(
                 onClick = { onConfirm(name, emoji, accentId) },
                 accent = ClayPalette.accentById(accentId),
                 height = 44.dp,
+                enabled = name.isNotBlank(),
             )
         },
         dismissButton = {
