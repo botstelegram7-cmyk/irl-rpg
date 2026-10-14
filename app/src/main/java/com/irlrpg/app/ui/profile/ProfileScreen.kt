@@ -1,6 +1,7 @@
 package com.irlrpg.app.ui.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,8 +17,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +50,7 @@ import com.irlrpg.app.ui.design.ClayScaffold
 import com.irlrpg.app.ui.design.ClaySectionHeader
 import com.irlrpg.app.ui.design.ClayTextField
 import com.irlrpg.app.ui.design.ClayTopBar
+import com.irlrpg.app.ui.theme.ClayAccent
 import com.irlrpg.app.ui.theme.ClayInk
 import com.irlrpg.app.ui.theme.ClayPalette
 import com.irlrpg.app.ui.theme.ClayShape
@@ -57,6 +61,11 @@ fun ProfileScreen(
     viewModel: ProfileViewModel,
     bottomBar: @Composable () -> Unit,
     onOpenSkills: () -> Unit,
+    onOpenSkillTree: () -> Unit = {},
+    onOpenAchievements: () -> Unit = {},
+    onOpenChallenges: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
+    onOpenCustomize: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
@@ -168,6 +177,21 @@ fun ProfileScreen(
             }
 
             item {
+                ClayCard(shape = ClayShape.Card, elevation = 12.dp) {
+                    ClaySectionHeader(
+                        title = "Grow your character",
+                        subtitle = "Every section below is driven by the activity you record",
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    ProfileLink("🌳", "Skill tree", "Nodes, prerequisites and mastery", ClayPalette.Mint, onOpenSkillTree)
+                    ProfileLink("🏔️", "Challenges", "Multi-objective goals with one reward", ClayPalette.Peach, onOpenChallenges)
+                    ProfileLink("🏅", "Achievements", "Unlocked from your real history", ClayPalette.Butter, onOpenAchievements)
+                    ProfileLink("🕰️", "Completion history", "Every logged entry, day by day", ClayPalette.Sky, onOpenHistory)
+                    ProfileLink("🎨", "Customize", "Titles and avatar frames", ClayPalette.Lavender, onOpenCustomize)
+                }
+            }
+
+            item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     StatTile("🧩", "${state.activeQuestCount}/${state.questCount}", "Active quests", ClayPalette.Lavender, Modifier.weight(1f))
                     StatTile("📝", "${state.logCount}", "Logged entries", ClayPalette.Sky, Modifier.weight(1f))
@@ -271,6 +295,45 @@ fun ProfileScreen(
     }
 
     ClayToast(message = message, onShown = viewModel::consumeMessage, bottomPadding = 104.dp)
+}
+
+@Composable
+private fun ProfileLink(
+    emoji: String,
+    title: String,
+    subtitle: String,
+    accent: ClayAccent,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(ClayShape.Medium)
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp, horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ClayIconTile(emoji = emoji, accent = accent, size = 42.dp, fontSize = 19.sp)
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = ClayInk.Primary,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = ClayInk.Muted,
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+            contentDescription = null,
+            tint = ClayInk.Faint,
+            modifier = Modifier.size(20.dp),
+        )
+    }
 }
 
 @Composable

@@ -4,18 +4,29 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.irlrpg.app.data.local.dao.AchievementDao
 import com.irlrpg.app.data.local.dao.AttributeDao
+import com.irlrpg.app.data.local.dao.BossDao
 import com.irlrpg.app.data.local.dao.CategoryDao
 import com.irlrpg.app.data.local.dao.PlayerDao
 import com.irlrpg.app.data.local.dao.ProgressionDao
 import com.irlrpg.app.data.local.dao.QuestDao
+import com.irlrpg.app.data.local.dao.QuestInstanceDao
 import com.irlrpg.app.data.local.dao.QuestLogDao
+import com.irlrpg.app.data.local.dao.QuestStepDao
+import com.irlrpg.app.data.local.dao.SkillNodeDao
+import com.irlrpg.app.data.local.entity.AchievementEarnedEntity
 import com.irlrpg.app.data.local.entity.AttributeEntity
+import com.irlrpg.app.data.local.entity.BossChallengeEntity
+import com.irlrpg.app.data.local.entity.BossObjectiveEntity
 import com.irlrpg.app.data.local.entity.CategoryEntity
 import com.irlrpg.app.data.local.entity.PlayerStatsEntity
 import com.irlrpg.app.data.local.entity.ProgressionEventEntity
 import com.irlrpg.app.data.local.entity.QuestEntity
+import com.irlrpg.app.data.local.entity.QuestInstanceEntity
 import com.irlrpg.app.data.local.entity.QuestLogEntity
+import com.irlrpg.app.data.local.entity.QuestStepEntity
+import com.irlrpg.app.data.local.entity.SkillNodeEntity
 
 @Database(
     entities = [
@@ -25,8 +36,15 @@ import com.irlrpg.app.data.local.entity.QuestLogEntity
         PlayerStatsEntity::class,
         AttributeEntity::class,
         ProgressionEventEntity::class,
+        // ---- Step 2 tables ----
+        QuestStepEntity::class,
+        QuestInstanceEntity::class,
+        SkillNodeEntity::class,
+        AchievementEarnedEntity::class,
+        BossChallengeEntity::class,
+        BossObjectiveEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class IrlRpgDatabase : RoomDatabase() {
@@ -37,6 +55,13 @@ abstract class IrlRpgDatabase : RoomDatabase() {
     abstract fun playerDao(): PlayerDao
     abstract fun attributeDao(): AttributeDao
     abstract fun progressionDao(): ProgressionDao
+
+    // ---- Step 2 ----
+    abstract fun questStepDao(): QuestStepDao
+    abstract fun questInstanceDao(): QuestInstanceDao
+    abstract fun skillNodeDao(): SkillNodeDao
+    abstract fun achievementDao(): AchievementDao
+    abstract fun bossDao(): BossDao
 
     companion object {
         private const val DB_NAME = "irl_rpg.db"
@@ -51,9 +76,11 @@ abstract class IrlRpgDatabase : RoomDatabase() {
                     IrlRpgDatabase::class.java,
                     DB_NAME,
                 )
-                    // Step 1 schema is v1; destructive fallback keeps developer
-                    // builds from crashing if the schema evolves before release.
-                    .fallbackToDestructiveMigration()
+                    // Explicit, additive migrations only. A user's XP, logs and
+                    // attributes are never discarded: every step is an ALTER or a
+                    // CREATE, verified by a migration test that boots a Step 1
+                    // database and checks the data survived.
+                    .addMigrations(*ALL_MIGRATIONS)
                     .build()
                     .also { instance = it }
             }

@@ -9,6 +9,7 @@ import com.irlrpg.app.data.repository.QuestRepository
 import com.irlrpg.app.domain.game.GameEngine
 import com.irlrpg.app.domain.game.LogResult
 import com.irlrpg.app.domain.game.PeriodKeys
+import com.irlrpg.app.domain.model.QuestKind
 import com.irlrpg.app.domain.model.QuestWithProgress
 import com.irlrpg.app.domain.model.ScheduleKind
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,12 +24,15 @@ enum class QuestFilter(val label: String) {
     All("All"),
     Today("Today"),
     Active("Active"),
+    Challenges("Challenges"),
+    MultiStep("Multi-step"),
     Paused("Paused"),
 }
 
 enum class QuestSort(val label: String) {
     Progress("Progress"),
     Recent("Newest"),
+    Deadline("Deadline"),
     Xp("XP reward"),
     Title("A-Z"),
 }
@@ -40,6 +44,8 @@ data class QuestsUiState(
     val filter: QuestFilter = QuestFilter.All,
     val sort: QuestSort = QuestSort.Progress,
     val categoryFilter: Long? = null,
+    /** Free-text search over title, description and notes. */
+    val query: String = "",
 )
 
 class QuestsViewModel(
@@ -68,22 +74,52 @@ class QuestsViewModel(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
-    private val data = combine(
+    private class Snapshot(
+        val quests: List<com.irlrpg.app.data.local.entity.QuestEntity>,
+        val categories: List<CategoryEntity>,
+        val logs: List<com.irlrpg.app.data.local.entity.QuestLogEntity>,
+        val stepsByQuest: Map<Long, List<com.irlrpg.app.data.local.entity.QuestStepEntity>>,
+    )
+
+    private val rawData = combine(
         questRepository.observeQuests(),
         questRepository.observeCategories(),
         questRepository.observeAllLogs(),
-        todaySource.flow,
-    ) { quests, categories, logs, today ->
-        Triple(quests, categories, QuestProgress.all(quests, logs, categories, today))
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Triple(emptyList(), emptyList(), emptyList()))
+        questRepository.observeAllSteps(),
+    ) { quests, categories, logs, steps ->
+        Snapshot(quests, categories, logs, steps.groupBy { it.questId })
+    }
+
+    /** Progress recomputed whenever data changes *or* the day rolls over. */
+    private val data = combine(rawData, todaySource.flow) { snapshot, today ->
+        ProgressSnapshot(
+            snapshot = snapshot,
+            progress = QuestProgress.all(
+                quests = snapshot.quests,
+                logs = snapshot.logs,
+                categories = snapshot.categories,
+                today = today,
+                stepsByQuest = snapshot.stepsByQuest,
+            ),
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        ProgressSnapshot(Snapshot(emptyList(), emptyList(), emptyList(), emptyMap()), emptyList()),
+    )
+
+    private class ProgressSnapshot(
+        val snapshot: Snapshot,
+        val progress: List<QuestWithProgress>,
+    )
 
     init {
         viewModelScope.launch {
-            data.collect { (_, categories, withProgress) ->
+            data.collect { value ->
                 _uiState.value = _uiState.value.copy(
                     loading = false,
-                    categories = categories,
-                    quests = applyFilters(withProgress, _uiState.value),
+                    categories = value.snapshot.categories,
+                    quests = applyFilters(value.progress, _uiState.value),
                 )
             }
         }
@@ -97,21 +133,23 @@ class QuestsViewModel(
 
     fun setCategoryFilter(categoryId: Long?) = update { it.copy(categoryFilter = categoryId) }
 
+    fun setQuery(query: String) = update { it.copy(query = query) }
+
+    fun clearFilters() = update { it.copy(query = "", categoryFilter = null, filter = QuestFilter.All) }
+
     private fun update(transform: (QuestsUiState) -> QuestsUiState) {
         val next = transform(_uiState.value)
         _uiState.value = next.copy(quests = applyFilters(visibleProgress(), next))
     }
 
-    private fun visibleProgress(): List<QuestWithProgress> {
-        val (_, _, progress) = data.value
-        return progress
-    }
+    private fun visibleProgress(): List<QuestWithProgress> = data.value.progress
 
     private fun applyFilters(
         source: List<QuestWithProgress>,
         state: QuestsUiState,
     ): List<QuestWithProgress> {
         val today = todaySource.today()
+        val query = state.query.trim().lowercase()
         val filtered = source.filter { item ->
             val matchesFilter = when (state.filter) {
                 QuestFilter.All -> true
@@ -121,10 +159,17 @@ class QuestsViewModel(
                     today,
                 )
                 QuestFilter.Active -> item.quest.isActive && !item.isComplete
+                QuestFilter.Challenges -> item.questKind == QuestKind.LongTerm
+                QuestFilter.MultiStep -> item.questKind == QuestKind.MultiStep
                 QuestFilter.Paused -> !item.quest.isActive
             }
             val matchesCategory = state.categoryFilter == null || item.quest.categoryId == state.categoryFilter
-            matchesFilter && matchesCategory
+            val matchesQuery = query.isEmpty() ||
+                item.quest.title.lowercase().contains(query) ||
+                item.quest.description.orEmpty().lowercase().contains(query) ||
+                item.quest.notes.orEmpty().lowercase().contains(query) ||
+                item.category?.name.orEmpty().lowercase().contains(query)
+            matchesFilter && matchesCategory && matchesQuery
         }
         return when (state.sort) {
             QuestSort.Progress -> filtered.sortedWith(
@@ -133,6 +178,12 @@ class QuestsViewModel(
                     .thenByDescending { it.fraction }
             )
             QuestSort.Recent -> filtered.sortedByDescending { it.quest.createdAt }
+            // Quests with a deadline first (soonest first), then undated ones.
+            QuestSort.Deadline -> filtered.sortedWith(
+                compareBy<QuestWithProgress> { it.quest.deadlineEpochDay == null }
+                    .thenBy { it.quest.deadlineEpochDay ?: Long.MAX_VALUE }
+                    .thenBy { it.isComplete }
+            )
             QuestSort.Xp -> filtered.sortedByDescending { it.quest.xpReward }
             QuestSort.Title -> filtered.sortedBy { it.quest.title.lowercase() }
         }

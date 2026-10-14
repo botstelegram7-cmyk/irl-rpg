@@ -33,7 +33,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Close
 import com.irlrpg.app.domain.game.XpEngine
+import com.irlrpg.app.domain.model.QuestDifficulty
+import com.irlrpg.app.domain.model.QuestKind
 import com.irlrpg.app.domain.model.ScheduleKind
 import com.irlrpg.app.domain.model.TrackingKind
 import com.irlrpg.app.domain.model.UnitKind
@@ -41,6 +46,7 @@ import com.irlrpg.app.ui.design.ClayButton
 import com.irlrpg.app.ui.design.ClayButtonStyle
 import com.irlrpg.app.ui.design.ClayCard
 import com.irlrpg.app.ui.design.ClayChip
+import com.irlrpg.app.ui.design.ClayIconButton
 import com.irlrpg.app.ui.design.ClayScaffold
 import com.irlrpg.app.ui.design.ClaySectionHeader
 import com.irlrpg.app.ui.design.ClayStepper
@@ -132,6 +138,15 @@ fun QuestEditorScreen(
                         onValueChange = viewModel::setTitle,
                         label = "Quest title",
                         placeholder = "e.g. Read a novel · Practise scales · Ship a feature",
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    ClayTextField(
+                        value = state.description,
+                        onValueChange = viewModel::setDescription,
+                        label = "Description (optional)",
+                        placeholder = "What exactly counts, and what does done look like?",
+                        singleLine = false,
+                        maxLines = 3,
                     )
                     Spacer(Modifier.height(16.dp))
                     Text(
@@ -306,6 +321,188 @@ fun QuestEditorScreen(
             item {
                 ClayCard(shape = ClayShape.Card, elevation = 14.dp) {
                     ClaySectionHeader(
+                        title = "Shape of the quest",
+                        subtitle = state.questKind.helper,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(QuestKind.entries.toList()) { kind ->
+                            ClayChip(
+                                text = kind.label,
+                                selected = state.questKind == kind,
+                                onClick = { viewModel.setQuestKind(kind) },
+                                accent = ClayPalette.Lavender,
+                                leadingEmoji = kind.emoji,
+                            )
+                        }
+                    }
+
+                    if (state.isMultiStep) {
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            text = "Steps — each one tracks its own progress",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = ClayInk.Secondary,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        state.steps.forEachIndexed { index, step ->
+                            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Step ${index + 1}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = ClayInk.Muted,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    ClayChip(
+                                        text = if (step.isRequired) "Required" else "Optional",
+                                        selected = step.isRequired,
+                                        onClick = { viewModel.toggleStepRequired(index) },
+                                        accent = ClayPalette.Mint,
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    ClayIconButton(
+                                        icon = Icons.Rounded.Close,
+                                        onClick = { viewModel.removeStep(index) },
+                                        contentDescription = "Remove step",
+                                        accent = ClayPalette.Blush,
+                                        size = 36.dp,
+                                    )
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    ClayTextField(
+                                        value = step.title,
+                                        onValueChange = { viewModel.updateStepTitle(index, it) },
+                                        label = "Step title",
+                                        modifier = Modifier.weight(1f),
+                                        placeholder = "e.g. Outline chapter 1",
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    ClayTextField(
+                                        value = step.targetAmount.toString(),
+                                        onValueChange = { viewModel.updateStepTarget(index, it) },
+                                        label = "Target",
+                                        modifier = Modifier.width(96.dp),
+                                        keyboardType = KeyboardType.Number,
+                                        accent = ClayPalette.Sky,
+                                    )
+                                }
+                            }
+                        }
+                        ClayButton(
+                            text = "Add step",
+                            onClick = viewModel::addStep,
+                            accent = ClayPalette.Lavender,
+                            style = ClayButtonStyle.Soft,
+                            icon = Icons.Rounded.Add,
+                            fillWidth = true,
+                            height = 44.dp,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "A multi-step quest counts finished steps: XP is awarded per step logged, and the completion bonus lands once per period.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ClayInk.Faint,
+                        )
+                    }
+
+                    if (state.isLongTerm) {
+                        Spacer(Modifier.height(16.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Planned length",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = ClayInk.Secondary,
+                                modifier = Modifier.weight(1f),
+                            )
+                            ClayStepper(
+                                value = state.durationDays,
+                                onValueChange = viewModel::setDurationDays,
+                                range = 1..730,
+                                step = 5,
+                                accent = ClayPalette.Peach,
+                                suffix = "days",
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Long-term challenges accumulate across weeks; progress is measured from the day the quest started.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ClayInk.Faint,
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = "Difficulty",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = ClayInk.Secondary,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(QuestDifficulty.entries.toList()) { difficulty ->
+                            ClayChip(
+                                text = "${difficulty.label} · ${difficulty.suggestedXp} XP",
+                                selected = state.difficulty == difficulty,
+                                onClick = { viewModel.setDifficulty(difficulty) },
+                                accent = ClayPalette.accentById(difficulty.accentId),
+                                leadingEmoji = difficulty.emoji,
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = "Deadline",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = ClayInk.Secondary,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item {
+                            ClayChip(
+                                text = "No deadline",
+                                selected = state.deadlineInDays == null,
+                                onClick = { viewModel.setDeadlineDays(null) },
+                                accent = ClayPalette.Mint,
+                            )
+                        }
+                        items(listOf(7, 14, 30, 60, 90, 180, 365)) { days ->
+                            ClayChip(
+                                text = "$days days",
+                                selected = state.deadlineInDays == days,
+                                onClick = { viewModel.setDeadlineDays(days) },
+                                accent = ClayPalette.Peach,
+                            )
+                        }
+                    }
+                    if (state.deadlineInDays != null) {
+                        Spacer(Modifier.height(10.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ClayStepper(
+                                value = state.deadlineInDays ?: 0,
+                                onValueChange = { viewModel.setDeadlineDays(it) },
+                                range = 0..1_095,
+                                step = 5,
+                                accent = ClayPalette.Peach,
+                                suffix = "days",
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = "Deadlines only label and sort a quest — they never punish you.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ClayInk.Faint,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                ClayCard(shape = ClayShape.Card, elevation = 14.dp) {
+                    ClaySectionHeader(
                         title = "Reward",
                         subtitle = "XP is only granted for real recorded progress",
                     )
@@ -314,7 +511,7 @@ fun QuestEditorScreen(
                         ClayStepper(
                             value = state.xpReward,
                             onValueChange = viewModel::setXpReward,
-                            range = 10..500,
+                            range = 10..1_000,
                             step = 10,
                             accent = ClayPalette.Butter,
                             suffix = "XP",

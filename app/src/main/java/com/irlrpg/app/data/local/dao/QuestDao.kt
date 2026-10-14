@@ -19,6 +19,12 @@ interface QuestDao {
     @Query("SELECT * FROM quests WHERE isActive = 1 ORDER BY createdAt ASC")
     fun observeActive(): Flow<List<QuestEntity>>
 
+    @Query("SELECT * FROM quests WHERE isActive = 1 ORDER BY createdAt ASC")
+    suspend fun allActive(): List<QuestEntity>
+
+    @Query("SELECT * FROM quests ORDER BY createdAt ASC")
+    suspend fun all(): List<QuestEntity>
+
     @Query("SELECT * FROM quests WHERE id = :id")
     fun observeById(id: Long): Flow<QuestEntity?>
 

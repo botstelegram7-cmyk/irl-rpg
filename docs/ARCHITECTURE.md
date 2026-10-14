@@ -1,4 +1,4 @@
-# IRL RPG — Architecture (Step 1)
+# IRL RPG — Architecture (Steps 1–2)
 
 ## Principles
 
@@ -133,7 +133,33 @@ milliseconds for the data volumes a personal tracker produces (thousands of rows
   quest's period progress in one query).
 - Single Gradle JVM with in-process Kotlin compilation keeps build memory modest.
 
-## Deliberate Step 1 boundaries
+## Step 2 additions
+
+### Derived, never stored
+Skill node state, level thresholds, achievement progress and boss progress are all *derived* at read time from the append-only log (`quest_logs`) plus a few small tables. That is why Step 2 can be added to an existing install without a single XP rewrite: nothing about Step 1 progress has to be recalculated or migrated, only new columns and empty tables are added.
+
+### Sync point
+`ProgressSync.sweep(today, announce)` is the single place that keeps the new systems consistent:
+
+1. `gameEngine.ensureInstancesForToday(today)` — materialise recurring instances (idempotent, unique index on quest + period),
+2. `bossRepository.checkCompletions(today)` — pay any challenge whose required objectives are complete (status re-checked inside the paying transaction),
+3. `achievementRepository.sync(today)` — persist newly earned achievements and report them.
+
+It is called on app start, on dashboard resume, after every logged entry and after editor changes. Deliberately **not** a background service: no wakeups, no permissions, no battery cost.
+
+### Anti-duplication
+| Risk | Guard |
+| --- | --- |
+| Recurring quest pays twice in one period | `quest_instances` unique index on `(questId, periodKey)` + bonus gated on `status` |
+| Multi-step quest re-pays a finished step | step rows summed per `(questId, periodKey, stepId)`; finished steps pay 0 |
+| Boss reward re-paid | `status`/`xpAwarded` re-checked inside the paying transaction |
+| Achievement invented retroactively | first-run `prime()` records history silently; the count is announced, not the list |
+| XP from opening the app or editing | no code path awards XP outside `GameEngine.logQuest` |
+
+### Rendering the skill tree cheaply
+`SkillTreeLayout.place()` computes lane/depth positions in plain Kotlin (unit-testable, no Compose), a single `Canvas` draws every connection, and the nodes are lightweight composables inside one `graphicsLayer` transform. Pan/zoom is therefore one transform for the whole tree, not per-node work — which is what keeps it smooth on budget hardware.
+
+## Deliberate boundaries
 
 - No reminders/notifications, no widgets, no cloud sync, no cosmetic shop (schedule is
   planned as a **local** `AlarmManager`/`WorkManager` feature in Step 2 — no servers).

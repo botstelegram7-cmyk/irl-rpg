@@ -39,6 +39,22 @@ interface QuestLogDao {
     @Query("SELECT * FROM quest_logs WHERE questId = :questId ORDER BY epochDay DESC, id DESC")
     fun observeForQuest(questId: Long): Flow<List<QuestLogEntity>>
 
+    @Query("SELECT * FROM quest_logs WHERE questId = :questId ORDER BY epochDay DESC, id DESC")
+    suspend fun rowsForQuestOrdered(questId: Long): List<QuestLogEntity>
+
+    @Query("SELECT * FROM quest_logs WHERE questId = :questId AND periodKey = :periodKey AND stepId = :stepId")
+    suspend fun rowsForStep(questId: Long, periodKey: String, stepId: Long): List<QuestLogEntity>
+
+    /** Newest completions across every quest — powers the global history screen. */
+    @Query("SELECT * FROM quest_logs WHERE isCompletion = 1 ORDER BY epochDay DESC, id DESC LIMIT :limit")
+    fun observeCompletions(limit: Int): Flow<List<QuestLogEntity>>
+
+    @Query("SELECT * FROM quest_logs WHERE isCompletion = 1 ORDER BY epochDay DESC, id DESC LIMIT :limit")
+    suspend fun completions(limit: Int): List<QuestLogEntity>
+
+    @Query("SELECT COUNT(*) FROM quest_logs WHERE questId = :questId AND isCompletion = 1")
+    suspend fun completionCountForQuest(questId: Long): Int
+
     @Query(
         """
         SELECT questId AS questId,

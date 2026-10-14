@@ -17,10 +17,23 @@ class IrlRpgApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
-        // First-run defaults (starter categories + the six skill attributes).
-        // Runs once, then a flag in SharedPreferences keeps startup instant.
+
         appScope.launch {
+            // First-run defaults (starter categories, skill attributes, skill tree).
             runCatching { container.seeder.seedIfNeeded() }
+
+            // Reconcile achievements with existing history exactly once per install
+            // upgrade. Two years of reading should not arrive as eleven pop-ups, so
+            // the first pass records them silently; afterwards every unlock is live.
+            runCatching {
+                val alreadyPrimed = container.settings.achievementsPrimed
+                if (alreadyPrimed) {
+                    container.progressSync.sweep(announce = true)
+                } else {
+                    container.progressSync.prime()
+                    container.settings.achievementsPrimed = true
+                }
+            }
         }
     }
 }

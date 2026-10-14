@@ -7,6 +7,8 @@ import com.irlrpg.app.data.local.entity.AttributeEntity
 import com.irlrpg.app.data.local.entity.PlayerStatsEntity
 import com.irlrpg.app.data.local.entity.ProgressionEventEntity
 import com.irlrpg.app.domain.game.LevelCurve
+import com.irlrpg.app.domain.game.LevelProgression
+import com.irlrpg.app.domain.game.LevelRules
 import com.irlrpg.app.domain.model.PlayerSnapshot
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -17,10 +19,22 @@ class PlayerRepository(
     private val playerDao: PlayerDao,
     private val attributeDao: AttributeDao,
     private val progressionDao: ProgressionDao,
+    /** Consulted on every read, so changing the rules takes effect immediately. */
+    private val levelRules: () -> LevelRules = { LevelRules.Default },
 ) {
 
     fun observeSnapshot(): Flow<PlayerSnapshot> =
         playerDao.observe().map { stats -> snapshotOf(stats ?: placeholderStats()) }
+
+    fun observeStats(): Flow<PlayerStatsEntity?> = playerDao.observe()
+
+    fun progression(): LevelProgression = LevelProgression(levelRules())
+
+    suspend fun statsOnce(): PlayerStatsEntity? = playerDao.get()
+
+    suspend fun setDisplayTitle(code: String?) = playerDao.setDisplayTitle(code)
+
+    suspend fun setCosmeticFrame(code: String) = playerDao.setCosmeticFrame(code)
 
     fun observeAttributes(): Flow<List<AttributeEntity>> = attributeDao.observeAll()
 
@@ -56,7 +70,24 @@ class PlayerRepository(
 
     suspend fun deleteAttribute(id: Long) = attributeDao.deleteById(id)
 
+    fun snapshotOf(stats: PlayerStatsEntity): PlayerSnapshot = companionSnapshot(stats, levelRules())
+
     companion object {
+        fun companionSnapshot(stats: PlayerStatsEntity, rules: LevelRules): PlayerSnapshot {
+            val progression = LevelProgression(rules)
+            val level = progression.levelForTotalXp(stats.totalXp)
+            return PlayerSnapshot(
+                stats = stats,
+                level = level,
+                rankTitle = LevelCurve.rankTitle(level),
+                rankEmoji = LevelCurve.rankEmoji(level),
+                xpIntoLevel = progression.xpIntoLevel(stats.totalXp),
+                xpForCurrentLevel = progression.xpSpanOfLevel(stats.totalXp),
+                nextLevelXp = progression.totalXpForLevel(level + 1),
+                progress = progression.progressFraction(stats.totalXp),
+            )
+        }
+
         fun placeholderStats(today: LocalDate = LocalDate.now()): PlayerStatsEntity = PlayerStatsEntity(
             id = 1,
             name = "Adventurer",
@@ -64,18 +95,8 @@ class PlayerRepository(
             createdAtEpochDay = today.toEpochDay(),
         )
 
-        fun snapshotOf(stats: PlayerStatsEntity): PlayerSnapshot {
-            val level = LevelCurve.levelForTotalXp(stats.totalXp)
-            return PlayerSnapshot(
-                stats = stats,
-                level = level,
-                rankTitle = LevelCurve.rankTitle(level),
-                rankEmoji = LevelCurve.rankEmoji(level),
-                xpIntoLevel = LevelCurve.xpIntoLevel(stats.totalXp),
-                xpForCurrentLevel = LevelCurve.xpSpanOfLevel(stats.totalXp),
-                nextLevelXp = LevelCurve.totalXpForLevel(level + 1),
-                progress = LevelCurve.progressFraction(stats.totalXp),
-            )
-        }
+        /** Default-rules convenience used by tests and non-DI call sites. */
+        fun snapshotOf(stats: PlayerStatsEntity): PlayerSnapshot =
+            companionSnapshot(stats, LevelRules.Default)
     }
 }

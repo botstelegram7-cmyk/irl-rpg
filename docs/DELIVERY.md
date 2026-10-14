@@ -1,5 +1,7 @@
 # IRL RPG — Step 1 Delivery Report
 
+> **Step 2 is delivered separately: see [`DELIVERY_STEP2.md`](DELIVERY_STEP2.md)** for the advanced quest system, skill tree, boss challenges, achievements, the v1→v2 migration and the Step 2 test results (41/41 passing).
+
 **Scope:** Product foundation, Claymorphism UI design system and core Dashboard.
 **Status:** ✅ Step 1 complete — builds, tests pass, no known blocking issues.
 **Build:** `app-debug.apk` 10.8 MB · `app-release-unsigned.apk` 7.2 MB · 32/32 unit tests green.
@@ -176,8 +178,10 @@ Manual verification performed during the build:
 | `assembleRelease` | ✅ success — `app/build/outputs/apk/release/app-release-unsigned.apk` (7.2 MB, unsigned) |
 | `testDebugUnitTest` | ✅ 32/32 passing |
 | Permissions | none |
-| Prebuilt APK | `prebuilt/app-debug.apk` · 10,868,485 bytes · SHA-256 `4bf36fcf002b570276bd4f0496319545366f83cdb80faa5e40d87319526ca9e1` |
-| Release page | https://github.com/botstelegram7-cmyk/irl-rpg/releases/tag/v1.0-step1 |
+| Prebuilt APK (Step 1) | `prebuilt/app-debug.apk` · 10,868,485 bytes · SHA-256 `4bf36fcf002b570276bd4f0496319545366f83cdb80faa5e40d87319526ca9e1` |
+| Release page (Step 1) | https://github.com/botstelegram7-cmyk/irl-rpg/releases/tag/v1.0-step1 |
+
+> **Superseded:** the Step 2 APK (11,053,229 bytes, SHA-256 `40be0838ef89348139ec5ddd622b97091446771c85f4b1a2fc372c26a3c93963`) ships in `prebuilt/app-debug.apk` and on the release page for Step 2 — see [`DELIVERY_STEP2.md`](DELIVERY_STEP2.md).
 | Network calls | none |
 
 ## 6. How to install the prebuilt APK
@@ -188,10 +192,13 @@ Manual verification performed during the build:
 4. First run seeds six starter categories and six skills (no sample quests, no fake XP — you start
    at Level 1 with 0 XP).
 
-## 7. Recommended next step (Step 2 preview)
+## 7. Step 2 status
+
+Step 2 (advanced quests, skill tree, boss challenges, achievements) is **delivered** — see
+[`DELIVERY_STEP2.md`](DELIVERY_STEP2.md). The following remain deferred and are candidates for Step 3:
 
 1. Deeper analytics: per-activity custom metrics, month/year heatmaps, goal trend lines.
 2. Local reminders for scheduled quests (notification permissions, quiet hours).
 3. Onboarding flow that suggests example quests from the user's profession (fully opt-in).
-4. Cosmetic reward layers: unlockable avatar art and theme accents tied to levels.
+4. Level-rule sliders exposed in a Settings screen.
 5. Home-screen widget showing today's quests.

@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -61,6 +62,7 @@ import com.irlrpg.app.ui.design.ClayIconTile
 import com.irlrpg.app.ui.design.ClayProgressBar
 import com.irlrpg.app.ui.design.ClayScaffold
 import com.irlrpg.app.ui.design.ClaySectionHeader
+import com.irlrpg.app.ui.design.ClayTextField
 import com.irlrpg.app.ui.design.ClayTopBar
 import com.irlrpg.app.ui.theme.ClayInk
 import com.irlrpg.app.ui.theme.ClayPalette
@@ -107,6 +109,17 @@ fun QuestsScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                item {
+                    ClayTextField(
+                        value = state.query,
+                        onValueChange = viewModel::setQuery,
+                        label = "",
+                        placeholder = "Search quests, notes or categories",
+                        leadingIcon = Icons.Rounded.Search,
+                        accent = ClayPalette.Mint,
+                    )
+                }
+
                 item {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(QuestFilter.entries.toList()) { filter ->
@@ -169,9 +182,11 @@ fun QuestsScreen(
                         ClayEmptyState(
                             emoji = if (state.filter == QuestFilter.Paused) "⏸️" else "🧩",
                             title = when (state.filter) {
-                                QuestFilter.All -> "No quests yet"
+                                QuestFilter.All -> if (state.query.isBlank()) "No quests yet" else "No matches"
                                 QuestFilter.Today -> "Nothing scheduled today"
                                 QuestFilter.Active -> "No active quests"
+                                QuestFilter.Challenges -> "No long-term challenges yet"
+                                QuestFilter.MultiStep -> "No multi-step quests yet"
                                 QuestFilter.Paused -> "No paused quests"
                             },
                             message = "Activities are yours to define — reading pages, writing words, coding hours, training sets, practising an instrument, anything measurable.",
@@ -301,9 +316,18 @@ private fun QuestBoardCard(
                     text = buildString {
                         append(item.category?.let { "${it.emoji} ${it.name}" } ?: "🗂️ Uncategorised")
                         append(" · ")
-                        append(ScheduleKind.fromName(quest.scheduleKind).label)
+                        if (item.isLongTerm) {
+                            append("Long-term")
+                        } else {
+                            append(ScheduleKind.fromName(quest.scheduleKind).label)
+                        }
+                        append(" · ")
+                        append(com.irlrpg.app.domain.model.QuestDifficulty.fromName(quest.difficulty).label)
                         append(" · ")
                         append("${quest.xpReward} XP")
+                        if (item.isMultiStep) {
+                            append(" · ${item.stepsCompleted}/${item.stepsTotal} steps")
+                        }
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = ClayInk.Muted,
@@ -369,13 +393,31 @@ private fun QuestBoardCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = buildString {
-                    if (quest.trackingKind == TrackingKind.Milestone.name) {
-                        append(if (item.isComplete) "Completed" else "One-off milestone")
-                    } else {
-                        append("${item.progress.coerceAtMost(item.target)}/${item.target} ")
-                        append(quest.customUnit ?: "")
-                        append(" ")
-                        append(QuestProgress.periodLabel(quest))
+                    when {
+                        item.isMultiStep -> {
+                            append("${item.stepsCompleted} of ${item.stepsTotal} steps")
+                            append(" ")
+                            append(QuestProgress.periodLabel(quest))
+                        }
+                        quest.trackingKind == TrackingKind.Milestone.name ->
+                            append(if (item.isComplete) "Completed" else "One-off milestone")
+                        else -> {
+                            append("${item.progress.coerceAtMost(item.target)}/${item.target} ")
+                            append(quest.customUnit ?: "")
+                            append(" ")
+                            append(QuestProgress.periodLabel(quest))
+                        }
+                    }
+                    item.daysLeft?.let { days ->
+                        append(" · ")
+                        append(
+                            when {
+                                item.isComplete -> "done"
+                                days < 0 -> "${-days} days overdue"
+                                days == 0L -> "due today"
+                                else -> "$days days left"
+                            }
+                        )
                     }
                 }.trim(),
                 style = MaterialTheme.typography.labelSmall,

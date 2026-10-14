@@ -22,6 +22,18 @@ IRL RPG is not a habit tracker with XP sprinkled on top. It is a personal progre
 - **Your data stays yours** — a local SQLite database, no account, no ads, no network calls, no paid APIs.
 - **It looks and feels premium** — a warm ivory Claymorphism design system with pastel clay surfaces, soft ambient shadows, tactile buttons and hand-drawn charts (no 3D engine, no heavy assets).
 
+## Step 2 — what is included
+
+Everything in Step 1 still works exactly as before; Step 2 adds depth without changing a single stored XP value.
+
+- **Advanced quest system** — five tracking styles (time, count, milestone, performance, custom) plus three *shapes*: single goal, **multi-step**, and **long-term challenge**. Every quest can carry a description, difficulty, optional deadline and configurable XP reward, and can be searched, filtered, sorted, edited, paused, resumed, duplicated and deleted. Completion history is kept per entry.
+- **Recurring quests done safely** — daily and weekly quests materialise an *instance* row per period (`quest_instances`, unique on quest + period), so a completion bonus is paid at most once per period and re-opening or re-logging can never mint XP.
+- **Character progression** — level thresholds are configurable (base 90 / step 60 by default, 20–400 / 0–300). Ranks run Wanderer → Ascendant. Levels are derived from stored XP, so changing the rules never resets or rewrites your progress.
+- **Universal skill tree** — create, edit and nest your own skill nodes (Reading → Comprehension → Analysis → Critical Thinking, Programming → Fundamentals → Projects → Advanced Development, and anything you invent). Nodes unlock from parent mastery or lifetime XP, show locked/available/in-progress/mastered states, and always explain *why* something is locked and how far along you are. Rendered with a lightweight custom Compose canvas — no game engine.
+- **Boss challenges** — optional, customisable real-life goals with several objectives (some linked to your quests, some manual). Progress comes from the activity log, the reward is paid exactly once, and completion plays a victory sequence. There is no combat gameplay.
+- **Achievements & cosmetics** — 27 achievements across 5 categories, all computed from **recorded activity** (never hard-coded, never seeded). Unlocking one grants an avatar frame or a title; cosmetics are purely visual and never gate real-life progress.
+- **History** — a day-grouped audit trail of every logged entry with its XP and level-up flags.
+
 ## Step 1 — what is included
 
 | Deliverable | Status |
@@ -49,6 +61,10 @@ Schedules: every day, weekdays, chosen days, weekly target, or “any time” (a
 
 ## XP rules (and anti-abuse)
 
+**Step 2 additions:** a multi-step quest pays each step from its own share of the reward budget and adds the completion bonus only once per period; a long-term challenge accumulates under one period key; a boss challenge pays its reward once and only when every required objective is verified against the log.
+
+
+
 ```
 Level 1 → 2   : 150 XP          Level 10 → 11 : 690 XP
 Level 2 → 3   : 210 XP          Level 20 → 21 : 1290 XP
@@ -60,6 +76,16 @@ cost(L → L+1) = 90 + 60 × L      cumulative = (L−1)(90 + 30L)
 - After a period's target is reached, further entries are still stored as history but award **zero XP**.
 - Opening the app, navigating, or creating quests never awards XP.
 - **Undo** and **reset** recompute XP from the surviving rows, so totals can never drift.
+
+## Step 2 screens
+
+| Screen | What you do there |
+| --- | --- |
+| Skill tree (`skill_tree`) | Pan/zoom the tree, tap a node for mastery and unlock requirements, add root skills, child skills, edit or remove nodes |
+| Challenges (`challenges`) | Start from 5 templates or build your own multi-objective challenge, log manual objectives, complete, archive, delete |
+| Achievements (`achievements`) | Browse earned + locked achievements with live progress and earn dates |
+| History (`history`) | Filter by quest and read every recorded entry, grouped by day |
+| Customize (`customize`) | Equip unlocked frames and titles; locked entries show the achievement and its progress |
 
 ## Screens
 
@@ -110,6 +136,9 @@ Requirements: **JDK 17**, Android SDK **API 35** (build-tools 35.0.0), Gradle 8.
 ```bash
 git clone https://github.com/botstelegram7-cmyk/irl-rpg.git
 cd irl-rpg
+
+# Prebuilt APK (no build needed): prebuilt/app-debug.apk
+# or download the latest release: https://github.com/botstelegram7-cmyk/irl-rpg/releases
 
 # Debug APK → app/build/outputs/apk/debug/app-debug.apk
 ./gradlew assembleDebug

@@ -27,6 +27,12 @@ interface PlayerDao {
 
     @Query("UPDATE player_stats SET name = :name WHERE id = 1")
     suspend fun setName(name: String)
+
+    @Query("UPDATE player_stats SET displayTitle = :code WHERE id = 1")
+    suspend fun setDisplayTitle(code: String?)
+
+    @Query("UPDATE player_stats SET cosmeticFrame = :code WHERE id = 1")
+    suspend fun setCosmeticFrame(code: String)
 }
 
 @Dao

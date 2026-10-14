@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -408,6 +409,7 @@ fun ClayTextField(
     singleLine: Boolean = true,
     suffix: String? = null,
     maxLines: Int = 1,
+    leadingIcon: ImageVector? = null,
 ) {
     Column(modifier = modifier) {
         Text(
@@ -432,6 +434,16 @@ fun ClayTextField(
             singleLine = singleLine,
             maxLines = maxLines,
             shape = ClayShape.Small,
+            leadingIcon = leadingIcon?.let { icon ->
+                {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (value.isBlank()) ClayInk.Faint else accent.deep,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            },
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             suffix = suffix?.let {
                 {

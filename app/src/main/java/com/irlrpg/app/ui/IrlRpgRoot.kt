@@ -11,8 +11,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.irlrpg.app.ui.achievements.AchievementsScreen
+import com.irlrpg.app.ui.achievements.AchievementsViewModel
 import com.irlrpg.app.ui.analytics.AnalyticsScreen
 import com.irlrpg.app.ui.analytics.AnalyticsViewModel
+import com.irlrpg.app.ui.boss.BossViewModel
+import com.irlrpg.app.ui.boss.BossesScreen
+import com.irlrpg.app.ui.history.HistoryScreen
+import com.irlrpg.app.ui.history.HistoryViewModel
+import com.irlrpg.app.ui.profile.CustomizeScreen
+import com.irlrpg.app.ui.profile.CustomizeViewModel
 import com.irlrpg.app.ui.common.appViewModel
 import com.irlrpg.app.ui.dashboard.DashboardScreen
 import com.irlrpg.app.ui.dashboard.DashboardViewModel
@@ -27,6 +35,8 @@ import com.irlrpg.app.ui.quests.QuestEditorScreen
 import com.irlrpg.app.ui.quests.QuestEditorViewModel
 import com.irlrpg.app.ui.quests.QuestsScreen
 import com.irlrpg.app.ui.quests.QuestsViewModel
+import com.irlrpg.app.ui.skills.SkillTreeScreen
+import com.irlrpg.app.ui.skills.SkillTreeViewModel
 import com.irlrpg.app.ui.skills.SkillsScreen
 import com.irlrpg.app.ui.skills.SkillsViewModel
 
@@ -63,7 +73,13 @@ fun IrlRpgRoot() {
     ) {
         composable(Routes.DASHBOARD) {
             val viewModel: DashboardViewModel = appViewModel {
-                DashboardViewModel(it.dashboardRepository, it.gameEngine, it.todaySource)
+                DashboardViewModel(
+                    dashboardRepository = it.dashboardRepository,
+                    gameEngine = it.gameEngine,
+                    progressSync = it.progressSync,
+                    playerRepository = it.playerRepository,
+                    todaySource = it.todaySource,
+                )
             }
             DashboardScreen(
                 viewModel = viewModel,
@@ -72,6 +88,10 @@ fun IrlRpgRoot() {
                 onOpenQuest = { questId -> navController.navigate(Routes.questDetail(questId)) },
                 onOpenAnalytics = { navigateTopLevel(Routes.ANALYTICS) },
                 onOpenQuests = { navigateTopLevel(Routes.QUESTS) },
+                onOpenSkillTree = { navController.navigate(Routes.SKILL_TREE) },
+                onOpenChallenges = { navController.navigate(Routes.CHALLENGES) },
+                onOpenAchievements = { navController.navigate(Routes.ACHIEVEMENTS) },
+                onOpenHistory = { navController.navigate(Routes.HISTORY) },
             )
         }
 
@@ -92,7 +112,11 @@ fun IrlRpgRoot() {
             val viewModel: SkillsViewModel = appViewModel {
                 SkillsViewModel(it.playerRepository, it.questRepository)
             }
-            SkillsScreen(viewModel = viewModel, bottomBar = { bottomBar(Routes.SKILLS) })
+            SkillsScreen(
+                viewModel = viewModel,
+                bottomBar = { bottomBar(Routes.SKILLS) },
+                onOpenSkillTree = { navController.navigate(Routes.SKILL_TREE) },
+            )
         }
 
         composable(Routes.ANALYTICS) {
@@ -114,7 +138,47 @@ fun IrlRpgRoot() {
                 viewModel = viewModel,
                 bottomBar = { bottomBar(Routes.PROFILE) },
                 onOpenSkills = { navigateTopLevel(Routes.SKILLS) },
+                onOpenSkillTree = { navController.navigate(Routes.SKILL_TREE) },
+                onOpenAchievements = { navController.navigate(Routes.ACHIEVEMENTS) },
+                onOpenChallenges = { navController.navigate(Routes.CHALLENGES) },
+                onOpenHistory = { navController.navigate(Routes.HISTORY) },
+                onOpenCustomize = { navController.navigate(Routes.CUSTOMIZE) },
             )
+        }
+
+        composable(Routes.SKILL_TREE) {
+            val viewModel: SkillTreeViewModel = appViewModel {
+                SkillTreeViewModel(it.skillTreeRepository, it.progressSync)
+            }
+            SkillTreeScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.CHALLENGES) {
+            val viewModel: BossViewModel = appViewModel {
+                BossViewModel(it.bossRepository, it.progressSync, it.todaySource)
+            }
+            BossesScreen(viewModel = viewModel)
+        }
+
+        composable(Routes.ACHIEVEMENTS) {
+            val viewModel: AchievementsViewModel = appViewModel {
+                AchievementsViewModel(it.achievementRepository)
+            }
+            AchievementsScreen(viewModel = viewModel)
+        }
+
+        composable(Routes.HISTORY) {
+            val viewModel: HistoryViewModel = appViewModel {
+                HistoryViewModel(it.historyRepository)
+            }
+            HistoryScreen(viewModel = viewModel)
+        }
+
+        composable(Routes.CUSTOMIZE) {
+            val viewModel: CustomizeViewModel = appViewModel {
+                CustomizeViewModel(it.playerRepository, it.achievementRepository)
+            }
+            CustomizeScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
         }
 
         composable(

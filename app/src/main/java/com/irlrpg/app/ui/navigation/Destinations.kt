@@ -12,6 +12,14 @@ object Routes {
     const val ANALYTICS = "analytics"
     const val PROFILE = "profile"
 
+    // ---- Step 2 full-screen routes ----
+    const val SKILL_TREE = "skill_tree"
+    const val CHALLENGES = "challenges"
+    const val ACHIEVEMENTS = "achievements"
+    const val HISTORY = "history"
+    const val CUSTOMIZE = "customize"
+    const val PROGRESSION = "progression"
+
     const val QUEST_EDITOR = "quest_editor?questId={questId}"
     const val QUEST_DETAIL = "quest_detail/{questId}"
 

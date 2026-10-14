@@ -10,7 +10,8 @@ import com.irlrpg.app.data.local.entity.CategoryEntity
 import com.irlrpg.app.data.local.entity.PlayerStatsEntity
 import com.irlrpg.app.data.local.entity.QuestEntity
 import com.irlrpg.app.data.local.entity.QuestLogEntity
-import com.irlrpg.app.domain.game.LevelCurve
+import com.irlrpg.app.domain.game.LevelProgression
+import com.irlrpg.app.domain.game.LevelRules
 import com.irlrpg.app.domain.game.PeriodKeys
 import com.irlrpg.app.domain.game.StreakCalculator
 import com.irlrpg.app.domain.model.DashboardState
@@ -34,17 +35,37 @@ class DashboardRepository(
     private val logDao: QuestLogDao,
     private val categoryDao: CategoryDao,
     private val playerDao: PlayerDao,
+    private val stepDao: com.irlrpg.app.data.local.dao.QuestStepDao,
     private val todaySource: TodaySource,
+    private val levelRules: () -> LevelRules = { LevelRules.Default },
 ) {
 
+    private data class DashboardInputs(
+        val stats: PlayerStatsEntity?,
+        val quests: List<QuestEntity>,
+        val categories: List<CategoryEntity>,
+        val logs: List<QuestLogEntity>,
+        val steps: List<com.irlrpg.app.data.local.entity.QuestStepEntity>,
+    )
+
     fun observeDashboard(): Flow<DashboardState> = combine(
-        playerDao.observe(),
-        questDao.observeActive(),
-        categoryDao.observeAll(),
-        logDao.observeAll(),
+        combine(
+            playerDao.observe(),
+            questDao.observeActive(),
+            categoryDao.observeAll(),
+            logDao.observeAll(),
+        ) { stats, quests, categories, logs -> DashboardInputs(stats, quests, categories, logs, emptyList()) },
+        stepDao.observeAll(),
         todaySource.flow,
-    ) { stats, quests, categories, logs, today ->
-        build(stats ?: PlayerRepository.placeholderStats(today), quests, categories, logs, today)
+    ) { inputs, steps, today ->
+        build(
+            stats = inputs.stats ?: PlayerRepository.placeholderStats(today),
+            quests = inputs.quests,
+            categories = inputs.categories,
+            logs = inputs.logs,
+            stepsByQuest = steps.groupBy { it.questId },
+            today = today,
+        )
     }.flowOn(Dispatchers.Default)
 
     private fun build(
@@ -52,6 +73,7 @@ class DashboardRepository(
         quests: List<QuestEntity>,
         categories: List<CategoryEntity>,
         logs: List<QuestLogEntity>,
+        stepsByQuest: Map<Long, List<com.irlrpg.app.data.local.entity.QuestStepEntity>>,
         today: LocalDate,
     ): DashboardState {
         val questsById = quests.associateBy { it.id }
@@ -65,7 +87,15 @@ class DashboardRepository(
                     today,
                 )
             }
-            .map { quest -> QuestProgress.withProgress(quest, logs, categoriesById[quest.categoryId], today) }
+            .map { quest ->
+                QuestProgress.withProgress(
+                    quest = quest,
+                    logs = logs,
+                    category = categoriesById[quest.categoryId],
+                    today = today,
+                    steps = stepsByQuest[quest.id].orEmpty(),
+                )
+            }
             .sortedWith(
                 compareBy<QuestWithProgress> { it.isComplete }
                     .thenByDescending { it.category?.name ?: "" }
@@ -95,7 +125,7 @@ class DashboardRepository(
             }
 
         return DashboardState(
-            player = PlayerRepository.snapshotOf(stats),
+            player = PlayerRepository.companionSnapshot(stats, levelRules()),
             today = todayMetrics,
             week = week,
             weekXp = week.sumOf { it.xp },
@@ -109,17 +139,19 @@ class DashboardRepository(
             todayQuests = todayQuests,
             recentCompletions = recent,
             lifetime = MetricsAggregator.lifetime(logs, questsById, quests.size),
+            stepsByQuest = stepsByQuest,
         )
     }
 
     /** Log ids that pushed the player across a level boundary. */
     private fun levelUpLogIds(logs: List<QuestLogEntity>): Set<Long> {
+        val progression = LevelProgression(levelRules())
         var running = 0
         val ids = mutableSetOf<Long>()
         logs.sortedWith(compareBy({ it.epochDay }, { it.id })).forEach { log ->
-            val before = LevelCurve.levelForTotalXp(running)
+            val before = progression.levelForTotalXp(running)
             running += log.xpEarned
-            val after = LevelCurve.levelForTotalXp(running)
+            val after = progression.levelForTotalXp(running)
             if (after > before) ids.add(log.id)
         }
         return ids

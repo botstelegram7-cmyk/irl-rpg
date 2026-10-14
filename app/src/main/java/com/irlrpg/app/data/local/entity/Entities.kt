@@ -58,9 +58,29 @@ data class QuestEntity(
     val attributeKind: String,
     val isActive: Boolean = true,
     val notes: String? = null,
+    // ---- Step 2 additions (all defaulted so Step 1 rows migrate untouched) ----
+    /** Longer description shown on the quest detail screen. */
+    val description: String? = null,
+    /** [com.irlrpg.app.domain.model.QuestDifficulty] name. */
+    val difficulty: String = "MEDIUM",
+    /** Optional deadline; null means no deadline pressure at all. */
+    val deadlineEpochDay: Long? = null,
+    /** [com.irlrpg.app.domain.model.QuestKind] name. */
+    val questKind: String = "STANDARD",
+    /** Length of a long-term challenge in days (0 = open-ended). */
+    val durationDays: Int = 0,
+    /** Epoch day a long-term challenge was started. */
+    val startedEpochDay: Long = 0,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
 )
+
+/** Convenience accessors that keep the enum mapping in one place. */
+val QuestEntity.difficultyEnum: com.irlrpg.app.domain.model.QuestDifficulty
+    get() = com.irlrpg.app.domain.model.QuestDifficulty.fromName(difficulty)
+
+val QuestEntity.questKindEnum: com.irlrpg.app.domain.model.QuestKind
+    get() = com.irlrpg.app.domain.model.QuestKind.fromName(questKind)
 
 /**
  * An immutable record of something the user actually did. XP is stored on the
@@ -91,6 +111,8 @@ data class QuestLogEntity(
     val periodKey: String,
     val epochDay: Long,
     val note: String? = null,
+    /** Set when the entry belongs to a step of a multi-step quest. */
+    val stepId: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
 )
 
@@ -102,6 +124,11 @@ data class PlayerStatsEntity(
     val totalXp: Int = 0,
     val createdAtEpochDay: Long,
     val lastQuestAt: Long? = null,
+    // ---- Step 2: cosmetic progression (never affects XP or gameplay) ----
+    /** Equipped title code from the cosmetic catalogue; null = rank title. */
+    val displayTitle: String? = null,
+    /** Equipped avatar frame code. */
+    val cosmeticFrame: String = "frame_ivory",
 )
 
 /** Skill attribute — six built-in kinds are seeded, custom ones can be added. */

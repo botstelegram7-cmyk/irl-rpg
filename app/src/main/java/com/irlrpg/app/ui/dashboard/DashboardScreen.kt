@@ -51,7 +51,11 @@ import com.irlrpg.app.domain.model.QuestWithProgress
 import com.irlrpg.app.domain.model.RecentCompletion
 import com.irlrpg.app.domain.model.TrackingKind
 import com.irlrpg.app.ui.common.accentFor
+import com.irlrpg.app.ui.components.AchievementBanner
+import com.irlrpg.app.ui.components.BossVictoryOverlay
 import com.irlrpg.app.ui.components.CelebrationOverlay
+import com.irlrpg.app.ui.components.LevelUpOverlay
+import com.irlrpg.app.ui.components.StepLogSheet
 import com.irlrpg.app.ui.components.QuickLogSheet
 import com.irlrpg.app.ui.design.ClayBar
 import com.irlrpg.app.ui.design.ClayBarChart
@@ -79,11 +83,19 @@ fun DashboardScreen(
     onOpenQuest: (Long) -> Unit,
     onOpenAnalytics: () -> Unit,
     onOpenQuests: () -> Unit,
+    onOpenSkillTree: () -> Unit = {},
+    onOpenChallenges: () -> Unit = {},
+    onOpenAchievements: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val celebration by viewModel.celebration.collectAsStateWithLifecycle()
     val busyQuestId by viewModel.busyQuestId.collectAsStateWithLifecycle()
+    val unlocked by viewModel.unlocked.collectAsStateWithLifecycle()
+    val victory by viewModel.victory.collectAsStateWithLifecycle()
+    val cosmetics by viewModel.cosmetics.collectAsStateWithLifecycle()
     var quickLogItem by remember { mutableStateOf<QuestWithProgress?>(null) }
+    var stepLogItem by remember { mutableStateOf<QuestWithProgress?>(null) }
 
     LifecycleResumeEffect(Unit) {
         viewModel.refreshDay()
@@ -91,7 +103,7 @@ fun DashboardScreen(
     }
 
     ClayScaffold(
-        topBar = { GreetingHeader(state) },
+        topBar = { GreetingHeader(state, cosmetics) },
         bottomBar = bottomBar,
     ) { padding ->
         val current = state
@@ -139,6 +151,15 @@ fun DashboardScreen(
                 }
 
                 item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ShortcutTile("🏔️", "Challenges", ClayPalette.Peach, onOpenChallenges, Modifier.weight(1f))
+                        ShortcutTile("🌳", "Skill tree", ClayPalette.Mint, onOpenSkillTree, Modifier.weight(1f))
+                        ShortcutTile("🏅", "Awards", ClayPalette.Butter, onOpenAchievements, Modifier.weight(1f))
+                        ShortcutTile("🕰️", "History", ClayPalette.Sky, onOpenHistory, Modifier.weight(1f))
+                    }
+                }
+
+                item {
                     ClaySectionHeader(
                         title = "Today's quests",
                         subtitle = if (current.plannedToday == 0) {
@@ -168,10 +189,11 @@ fun DashboardScreen(
                             busy = busyQuestId == item.quest.id,
                             onOpen = { onOpenQuest(item.quest.id) },
                             onQuickLog = {
-                                if (item.quest.trackingKind == TrackingKind.Milestone.name) {
-                                    viewModel.log(item.quest.id, 1L)
-                                } else {
-                                    quickLogItem = item
+                                when {
+                                    item.isMultiStep -> stepLogItem = item
+                                    item.quest.trackingKind == TrackingKind.Milestone.name ->
+                                        viewModel.log(item.quest.id, 1L)
+                                    else -> quickLogItem = item
                                 }
                             },
                         )
@@ -207,7 +229,80 @@ fun DashboardScreen(
         )
     }
 
+    stepLogItem?.let { item ->
+        StepLogSheet(
+            item = item,
+            steps = state?.stepsFor(item.quest.id).orEmpty(),
+            onDismiss = { stepLogItem = null },
+            onLog = { stepId, amount ->
+                viewModel.logStep(item.quest.id, stepId, amount)
+                stepLogItem = null
+            },
+        )
+    }
+
+    // Celebration order matters: quest → level up → challenge → achievements.
     CelebrationOverlay(result = celebration, onDismiss = viewModel::dismissCelebration)
+
+    val player = state?.player
+    celebration?.takeIf { it.levelUp && player != null }?.let { result ->
+        val snapshot = requireNotNull(player)
+        LevelUpOverlay(
+            newLevel = result.newLevel,
+            rankTitle = snapshot.rankTitle,
+            rankEmoji = snapshot.rankEmoji,
+            totalXp = result.totalXp,
+            xpIntoLevel = snapshot.xpIntoLevel,
+            xpForLevel = snapshot.xpForCurrentLevel,
+            onDismiss = viewModel::dismissCelebration,
+        )
+    }
+
+    victory?.let { (win, count) ->
+        BossVictoryOverlay(
+            victory = win,
+            objectivesTotal = count.coerceAtLeast(win.objectivesCompleted),
+            onDismiss = viewModel::dismissVictory,
+        )
+    }
+
+    AchievementBanner(
+        newlyEarned = unlocked,
+        onShown = viewModel::acknowledgeAchievement,
+    )
+}
+
+@Composable
+private fun ShortcutTile(
+    emoji: String,
+    label: String,
+    accent: ClayAccent,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ClayCard(
+        modifier = modifier,
+        shape = ClayShape.Card,
+        elevation = 10.dp,
+        glowAlpha = 0.14f,
+        contentPadding = PaddingValues(vertical = 14.dp, horizontal = 8.dp),
+        onClick = onClick,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(text = emoji, fontSize = 22.sp)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = accent.deep,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
 
 @Composable
@@ -237,7 +332,7 @@ private fun LoadingDashboard(padding: PaddingValues) {
 }
 
 @Composable
-private fun GreetingHeader(state: DashboardState?) {
+private fun GreetingHeader(state: DashboardState?, cosmetics: CosmeticsView) {
     val hour = remember { java.time.LocalTime.now().hour }
     Row(
         modifier = Modifier
@@ -260,9 +355,12 @@ private fun GreetingHeader(state: DashboardState?) {
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = DateX.fullDate(LocalDate.now()),
+                text = buildString {
+                    cosmetics.titleName?.let { append("$it · ") }
+                    append(DateX.fullDate(LocalDate.now()))
+                },
                 style = MaterialTheme.typography.bodySmall,
-                color = ClayInk.Muted,
+                color = if (cosmetics.titleName != null) ClayPalette.Lavender.deep else ClayInk.Muted,
             )
         }
         val streak = state?.streak

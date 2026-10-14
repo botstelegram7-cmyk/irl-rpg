@@ -15,20 +15,49 @@ data class QuestWithProgress(
     val progress: Long,
     val category: CategoryEntity?,
     val completions: Int = 0,
+    /** Multi-step quests: required steps and how many are finished this period. */
+    val stepsTotal: Int = 0,
+    val stepsCompleted: Int = 0,
+    val periodKey: String = "",
+    /** Ids of the steps already satisfied in this period. */
+    val completedStepIds: Set<Long> = emptySet(),
 ) {
-    val target: Long get() = quest.targetAmount
+    val questKind: com.irlrpg.app.domain.model.QuestKind
+        get() = com.irlrpg.app.domain.model.QuestKind.fromName(quest.questKind)
+
+    val isMultiStep: Boolean
+        get() = questKind == com.irlrpg.app.domain.model.QuestKind.MultiStep && stepsTotal > 0
+
+    /** Target expressed in the quest's own terms (steps for multi-step quests). */
+    val target: Long
+        get() = if (isMultiStep) stepsTotal.toLong() else quest.targetAmount
+
     val fraction: Float
         get() = when {
+            isMultiStep -> if (stepsTotal <= 0) 0f else stepsCompleted.toFloat() / stepsTotal.toFloat()
             quest.trackingKindEnum == TrackingKind.Milestone -> if (progress > 0L) 1f else 0f
             target <= 0L -> 0f
             else -> (progress.toFloat() / target.toFloat()).coerceIn(0f, 1f)
         }
+
     val isComplete: Boolean
-        get() = when (quest.trackingKindEnum) {
-            TrackingKind.Milestone -> progress > 0L
+        get() = when {
+            isMultiStep -> stepsTotal > 0 && stepsCompleted >= stepsTotal
+            quest.trackingKindEnum == TrackingKind.Milestone -> progress > 0L
             else -> target > 0L && progress >= target
         }
+
     val remaining: Long get() = (target - progress).coerceAtLeast(0L)
+
+    val isLongTerm: Boolean
+        get() = questKind == com.irlrpg.app.domain.model.QuestKind.LongTerm
+
+    /** Days left until the quest's deadline, if it has one. */
+    val daysLeft: Long?
+        get() = quest.deadlineEpochDay?.let { it - java.time.LocalDate.now().toEpochDay() }
+
+    val isOverdue: Boolean
+        get() = !isComplete && (daysLeft?.let { it < 0 } ?: false)
 }
 
 /** Player state resolved from total XP. */
@@ -103,9 +132,14 @@ data class DashboardState(
     val todayQuests: List<QuestWithProgress>,
     val recentCompletions: List<RecentCompletion>,
     val lifetime: LifetimeTotals,
+    /** Multi-step quest definitions, keyed by quest id. */
+    val stepsByQuest: Map<Long, List<com.irlrpg.app.data.local.entity.QuestStepEntity>> = emptyMap(),
 ) {
     val plannedToday: Int get() = todayQuests.size
     val completedToday: Int get() = todayQuests.count { it.isComplete }
+
+    fun stepsFor(questId: Long): List<com.irlrpg.app.data.local.entity.QuestStepEntity> =
+        stepsByQuest[questId].orEmpty()
 }
 
 data class RecentCompletion(

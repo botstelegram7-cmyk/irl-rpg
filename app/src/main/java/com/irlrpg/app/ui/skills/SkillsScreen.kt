@@ -58,6 +58,7 @@ import com.irlrpg.app.ui.theme.ClayShape
 fun SkillsScreen(
     viewModel: SkillsViewModel,
     bottomBar: @Composable () -> Unit,
+    onOpenSkillTree: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
@@ -105,6 +106,15 @@ fun SkillsScreen(
                         )
                     }
                     Spacer(Modifier.height(16.dp))
+                    ClayButton(
+                        text = "Open the skill tree",
+                        onClick = onOpenSkillTree,
+                        accent = ClayPalette.Mint,
+                        fillWidth = true,
+                        height = 48.dp,
+                        leadingEmoji = "🌳",
+                    )
+                    Spacer(Modifier.height(10.dp))
                     ClayButton(
                         text = "Add a custom skill",
                         onClick = { showAdd = true },
