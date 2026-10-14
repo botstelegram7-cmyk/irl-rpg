@@ -176,6 +176,8 @@ Manual verification performed during the build:
 | `assembleRelease` | ✅ success — `app/build/outputs/apk/release/app-release-unsigned.apk` (7.2 MB, unsigned) |
 | `testDebugUnitTest` | ✅ 32/32 passing |
 | Permissions | none |
+| Prebuilt APK | `prebuilt/app-debug.apk` · 10,868,485 bytes · SHA-256 `4bf36fcf002b570276bd4f0496319545366f83cdb80faa5e40d87319526ca9e1` |
+| Release page | https://github.com/botstelegram7-cmyk/irl-rpg/releases/tag/v1.0-step1 |
 | Network calls | none |
 
 ## 6. How to install the prebuilt APK
