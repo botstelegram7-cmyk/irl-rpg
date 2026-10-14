@@ -131,7 +131,10 @@ Run as two invocations to stay inside the sandbox's RAM budget (the whole suite 
 | Debug APK | `:app:assembleDebug` | ✅ `app-debug.apk` — 11,053,229 bytes, sha256 `40be0838ef89348139ec5ddd622b97091446771c85f4b1a2fc372c26a3c93963` |
 | Release APK (unsigned) | `:app:assembleRelease` | ✅ `app-release-unsigned.apk` — 7,455,293 bytes, sha256 `b840bb9fb4ced9ae56937d38b48b8af3a42976014271c31430145fb85eb6be8c` |
 
-The debug APK is published in `prebuilt/app-debug.apk` and attached to the GitHub release, so it can be installed on any Android 7.0+ (API 24) device without a build step.
+The debug APK is published in `prebuilt/app-debug.apk` and attached to the GitHub release
+(https://github.com/botstelegram7-cmyk/irl-rpg/releases/tag/v1.0-step2), so it can be installed on any
+Android 7.0+ (API 24) device without a build step. Downloading it unauthenticated was verified: 11,053,229 bytes,
+SHA-256 `40be0838ef89348139ec5ddd622b97091446771c85f4b1a2fc372c26a3c93963`.
 
 ---
 

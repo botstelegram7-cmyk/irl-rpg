@@ -138,7 +138,9 @@ git clone https://github.com/botstelegram7-cmyk/irl-rpg.git
 cd irl-rpg
 
 # Prebuilt APK (no build needed): prebuilt/app-debug.apk
-# or download the latest release: https://github.com/botstelegram7-cmyk/irl-rpg/releases
+# or download the Step 2 build directly:
+#   https://github.com/botstelegram7-cmyk/irl-rpg/releases/tag/v1.0-step2
+#   (irl-rpg-step2-debug.apk · 11,053,229 bytes · sha256 40be0838ef89348139ec5ddd622b97091446771c85f4b1a2fc372c26a3c93963)
 
 # Debug APK → app/build/outputs/apk/debug/app-debug.apk
 ./gradlew assembleDebug
