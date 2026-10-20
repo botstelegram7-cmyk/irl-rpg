@@ -71,62 +71,72 @@ object SkillTreeLayout {
     )
 
     /**
-     * Assigns every node a position: each root branch gets its own horizontal
-     * lane, and depth moves the node to the right (or further left for the
-     * mirrored descendants used to keep tall lanes compact).
+     * Assigns every node a position.
+     *
+     * Each root branch gets its own horizontal lane. Within a branch, nodes are
+     * stacked vertically with breathing room so labels never overlap. Depth still
+     * moves nodes to the right; a subtle zig-zag keeps the graph hand-placed.
      */
     fun place(nodes: List<SkillNodeView>): Map<Long, Placement> {
         if (nodes.isEmpty()) return emptyMap()
         val byId = nodes.associateBy { it.node.id }
         val childrenByParent = nodes.groupBy { it.node.parentId }
 
-        fun rootOf(id: Long): Long {
-            var current = byId[id] ?: return id
-            var guard = 0
-            while (current.node.parentId != null && guard++ < 64) {
-                current = byId[current.node.parentId] ?: break
-                if (current.node.parentId == null) return current.node.id
-            }
-            return current.node.id
-        }
-
         val roots = nodes.filter { it.node.parentId == null }
             .sortedWith(compareBy({ it.node.sortOrder }, { it.node.id }))
 
         val placements = LinkedHashMap<Long, Placement>()
-        var lane = 0
-        roots.forEach { root ->
-            var cursor = 0
-            fun walk(id: Long, depth: Int) {
-                val view = byId[id] ?: return
-                val indexInLane = cursor++
-                // Zig-zag every other depth for a hand-placed, non-mechanical look.
-                val zig = if (depth % 2 == 0) 0f else 16f
+
+        // Global vertical slot counter — each leaf row advances the cursor,
+        // guaranteeing no two nodes share a y.
+        var rowSlot = 0
+
+        fun walk(id: Long, depth: Int, rootId: Long): Int {
+            val view = byId[id] ?: return rowSlot
+            val children = childrenByParent[id].orEmpty()
+                .sortedWith(compareBy({ it.node.sortOrder }, { it.node.id }))
+            if (children.isEmpty()) {
+                val zig = if (depth % 2 == 0) 0f else 10f
                 placements[id] = Placement(
                     id = id,
                     x = PADDING + depth * COL_SPACING,
-                    y = PADDING + lane * ROW_SPACING + indexInLane * 0f + zig,
-                    rootId = root.node.id,
+                    y = PADDING + rowSlot * ROW_SPACING + zig,
+                    rootId = rootId,
                     depth = depth,
                 )
-                childrenByParent[id].orEmpty()
-                    .sortedWith(compareBy({ it.node.sortOrder }, { it.node.id }))
-                    .forEach { child -> walk(child.node.id, depth + 1) }
+                rowSlot++
+                return rowSlot - 1
             }
-            walk(root.node.id, 0)
-            lane++
+            // Place children first so we can centre the parent among them.
+            val childRows = mutableListOf<Int>()
+            children.forEach { child ->
+                childRows += walk(child.node.id, depth + 1, rootId)
+            }
+            val firstY = PADDING + childRows.first() * ROW_SPACING
+            val lastY = PADDING + childRows.last() * ROW_SPACING
+            val parentY = (firstY + lastY) / 2f
+            placements[id] = Placement(
+                id = id,
+                x = PADDING + depth * COL_SPACING,
+                y = parentY,
+                rootId = rootId,
+                depth = depth,
+            )
+            return (parentY / ROW_SPACING).toInt()
         }
 
-        // Any node whose parent vanished (defensive) is placed as its own lane.
+        roots.forEach { root -> walk(root.node.id, 0, root.node.id) }
+
+        // Defensive: any orphan whose parent vanished gets its own lane.
         nodes.filter { !placements.containsKey(it.node.id) }.forEach { orphan ->
             placements[orphan.node.id] = Placement(
                 id = orphan.node.id,
                 x = PADDING,
-                y = PADDING + lane * ROW_SPACING,
+                y = PADDING + rowSlot * ROW_SPACING,
                 rootId = orphan.node.id,
                 depth = 0,
             )
-            lane++
+            rowSlot++
         }
         return placements
     }
@@ -191,7 +201,7 @@ fun ClaySkillTree(
                     SkillNodeState.Mastered -> accent.base
                     SkillNodeState.InProgress -> accent.base.copy(alpha = 0.65f)
                     SkillNodeState.Available -> accent.base.copy(alpha = 0.38f)
-                    SkillNodeState.Locked -> ClayInk.Faint.copy(alpha = 0.28f)
+                    SkillNodeState.Locked -> ClayInk.Muted.copy(alpha = 0.42f)
                 }
                 val path = Path().apply {
                     moveTo(startX, startY)
@@ -246,7 +256,7 @@ private fun SkillNode(
             SkillNodeState.Mastered -> accent.base
             SkillNodeState.InProgress -> accent.soft
             SkillNodeState.Available -> ClayPalette.SurfacePure
-            SkillNodeState.Locked -> ClayPalette.SurfaceMuted
+            SkillNodeState.Locked -> Color(0xFFEDE8F5)
         },
         animationSpec = tween(260, easing = FastOutSlowInEasing),
         label = "nodeContainer",
@@ -309,6 +319,7 @@ private fun SkillNode(
                         color = when {
                             selected -> accent.deep
                             view.state == SkillNodeState.Available -> accent.base.copy(alpha = 0.55f)
+                            view.state == SkillNodeState.Locked -> ClayInk.Muted.copy(alpha = 0.35f)
                             else -> Color.White.copy(alpha = 0.55f)
                         },
                         shape = CircleShape,
@@ -341,7 +352,7 @@ private fun SkillNode(
             fontWeight = if (view.state == SkillNodeState.Mastered) FontWeight.Bold else FontWeight.Medium,
             color = when (view.state) {
                 SkillNodeState.Mastered -> accent.deep
-                SkillNodeState.Locked -> ClayInk.Faint
+                SkillNodeState.Locked -> ClayInk.Muted
                 else -> ClayInk.Primary
             },
             textAlign = TextAlign.Center,

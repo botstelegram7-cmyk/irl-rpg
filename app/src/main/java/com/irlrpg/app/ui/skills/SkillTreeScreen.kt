@@ -1,9 +1,11 @@
 package com.irlrpg.app.ui.skills
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,18 +18,19 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -54,7 +58,7 @@ import com.irlrpg.app.ui.design.ClayButton
 import com.irlrpg.app.ui.design.ClayButtonStyle
 import com.irlrpg.app.ui.design.ClayCard
 import com.irlrpg.app.ui.design.ClayChip
-import com.irlrpg.app.ui.design.ClayEmptyState
+import com.irlrpg.app.ui.design.ClayDivider
 import com.irlrpg.app.ui.design.ClayIconButton
 import com.irlrpg.app.ui.design.ClayIconTile
 import com.irlrpg.app.ui.design.ClayProgressBar
@@ -85,6 +89,13 @@ fun SkillTreeScreen(
     var scale by remember { mutableFloatStateOf(0.85f) }
     var offset by remember { mutableStateOf(Offset(24f, 12f)) }
     var confirmDeleteId by remember { mutableStateOf<Long?>(null) }
+    // Fallback list index used when gestures are unavailable (accessibility / mouse)
+    var fallbackIndex by remember { mutableStateOf<Int?>(null) }
+
+    fun resetView() {
+        scale = 0.85f
+        offset = Offset(24f, 12f)
+    }
 
     ClayScaffold(
         topBar = {
@@ -96,88 +107,44 @@ fun SkillTreeScreen(
             )
         },
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = padding.calculateTopPadding()),
+        // One scroll container so the graph + summary + legend move together
+        // and the graph never fights the page scroll.
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = padding.calculateTopPadding() + 4.dp,
+                bottom = padding.calculateBottomPadding() + 24.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // Tree canvas — pan with one finger, pinch to zoom.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(ClayShape.Card)
-                    .background(ClayPalette.SurfaceCream.copy(alpha = 0.75f))
-                    .padding(horizontal = 12.dp)
-                    .pointerInput(Unit) {
-                        detectTransformGestures { _, pan, zoom, _ ->
-                            scale = (scale * zoom).coerceIn(0.5f, 1.6f)
-                            offset = Offset(
-                                x = (offset.x + pan.x).coerceIn(-2200f, 1200f),
-                                y = (offset.y + pan.y).coerceIn(-2200f, 1200f),
-                            )
-                        }
+            // ── Graph viewport ──────────────────────────────────────────────
+            item {
+                SkillTreeViewport(
+                    nodes = state.nodes,
+                    selectedId = selected?.node?.id,
+                    onSelect = { viewModel.select(it) },
+                    scale = scale,
+                    offset = offset,
+                    onScaleChange = { scale = it },
+                    onOffsetChange = { offset = it },
+                    onResetView = { resetView() },
+                    onAddRoot = { viewModel.openCreate(null) },
+                    fallbackIndex = fallbackIndex,
+                    onFallbackSelect = { index ->
+                        fallbackIndex = index
+                        state.nodes.getOrNull(index)?.let { viewModel.select(it) }
                     },
-            ) {
-                if (state.nodes.isEmpty()) {
-                    ClayEmptyState(
-                        emoji = "🌳",
-                        title = "Your tree is empty",
-                        message = "Add a root skill and grow branches from it. Each node levels up from XP earned by the quests linked to its attribute.",
-                        actionLabel = "Add a root skill",
-                        onAction = { viewModel.openCreate(null) },
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(20.dp),
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .clipToBounds()
-                            .fillMaxSize(),
-                    ) {
-                        ClaySkillTree(
-                            nodes = state.nodes,
-                            selectedId = selected?.node?.id,
-                            onSelect = { viewModel.select(it) },
-                            scale = scale,
-                            offset = offset,
-                        )
-                    }
-                    Row(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        ClayIconButton(
-                            icon = Icons.Rounded.Add,
-                            onClick = { viewModel.openCreate(null) },
-                            contentDescription = "Add root skill",
-                            accent = ClayPalette.Mint,
-                            size = 44.dp,
-                        )
-                        ClayButton(
-                            text = "Reset view",
-                            onClick = { scale = 0.85f; offset = Offset(24f, 12f) },
-                            accent = ClayPalette.Sky,
-                            style = ClayButtonStyle.Soft,
-                            height = 44.dp,
-                            leadingEmoji = "🔄",
-                        )
-                    }
-                }
+                )
             }
 
-            // Summary + legend
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-            ) {
+            // ── Summary + legend (inside their own card, not floating) ─────
+            item {
                 ClayCard(
                     shape = ClayShape.Card,
-                    elevation = 12.dp,
+                    elevation = 10.dp,
+                    glowAlpha = 0.14f,
                     contentPadding = PaddingValues(16.dp),
                 ) {
                     ClaySectionHeader(
@@ -185,7 +152,7 @@ fun SkillTreeScreen(
                         subtitle = "${state.mastered} of ${state.total} nodes mastered · ${state.totalTreeXp} XP mapped to skills",
                     )
                     Spacer(Modifier.height(12.dp))
-                    ClayProgressBar(progress = state.mastery, accent = ClayPalette.Mint, height = 12.dp)
+                    ClayProgressBar(progress = state.mastery, accent = ClayPalette.Mint, height = 10.dp)
                     Spacer(Modifier.height(14.dp))
                     SkillTreeLegend(
                         locked = state.locked,
@@ -193,12 +160,35 @@ fun SkillTreeScreen(
                         inProgress = state.inProgress,
                         mastered = state.mastered,
                     )
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(10.dp))
                     Text(
-                        text = "Drag to pan · pinch to zoom · tap a node for details and its unlock conditions",
+                        text = "Drag to pan · pinch to zoom · tap a node for details and unlock conditions",
                         style = MaterialTheme.typography.labelSmall,
                         color = ClayInk.Faint,
                     )
+                    // Accessibility: non-gesture node picker
+                    if (state.nodes.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        ClayDivider(verticalPadding = 6.dp)
+                        Text(
+                            text = "Or pick a skill to inspect",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ClayInk.Muted,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(state.nodes, key = { it.node.id }) { node ->
+                                val isSelected = selected?.node?.id == node.node.id
+                                ClayChip(
+                                    text = node.node.name,
+                                    selected = isSelected,
+                                    onClick = { viewModel.select(node) },
+                                    accent = ClayPalette.accentById(node.node.accentId),
+                                    leadingEmoji = node.node.emoji,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -250,6 +240,148 @@ fun SkillTreeScreen(
         onShown = viewModel::consumeMessage,
         bottomPadding = 32.dp,
     )
+}
+
+/**
+ * The graph's own clearly defined viewport.
+ *
+ * - The card *is* the viewport: its bounds + inset are the drawable area so
+ *   nodes can never be clipped at screen edges.
+ * - Controls live in a dedicated toolbar row *below* the canvas, never as a
+ *   floating overlay on top of nodes.
+ * - On small screens the viewport height shrinks but stays usable.
+ */
+@Composable
+private fun SkillTreeViewport(
+    nodes: List<SkillNodeView>,
+    selectedId: Long?,
+    onSelect: (SkillNodeView) -> Unit,
+    scale: Float,
+    offset: Offset,
+    onScaleChange: (Float) -> Unit,
+    onOffsetChange: (Offset) -> Unit,
+    onResetView: () -> Unit,
+    onAddRoot: () -> Unit,
+    fallbackIndex: Int?,
+    onFallbackSelect: (Int) -> Unit,
+) {
+    val config = LocalConfiguration.current
+    val isSmallScreen = config.screenWidthDp < 360
+    // Minimum height so the graph has room even on small phones; the card grows
+    // if the computed canvas is taller.
+    val viewportHeight = if (isSmallScreen) 280.dp else 380.dp
+
+    ClayCard(
+        shape = ClayShape.Card,
+        elevation = 12.dp,
+        glowAlpha = 0.16f,
+        contentPadding = PaddingValues(0.dp),
+    ) {
+        // ── Canvas area: inset from the card edge so nothing touches the border
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(viewportHeight)
+                .clip(ClayShape.Card)
+                .background(ClayPalette.SurfaceCream.copy(alpha = 0.72f))
+                .clipToBounds()
+                .padding(8.dp)
+                .pointerInput(nodes) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        onScaleChange((scale * zoom).coerceIn(0.5f, 1.6f))
+                        onOffsetChange(
+                            Offset(
+                                x = (offset.x + pan.x).coerceIn(-2200f, 1200f),
+                                y = (offset.y + pan.y).coerceIn(-2200f, 1200f),
+                            )
+                        )
+                    }
+                },
+        ) {
+            if (nodes.isEmpty()) {
+                // Empty state lives *inside* the viewport so the toolbar still shows
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        ClayIconTile(emoji = "🌳", accent = ClayPalette.Mint, size = 56.dp, fontSize = 26.sp)
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = "Your tree is empty",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = ClayInk.Primary,
+                        )
+                        Text(
+                            text = "Add a root skill to start a branch",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ClayInk.Muted,
+                        )
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .clipToBounds()
+                        .fillMaxSize(),
+                ) {
+                    ClaySkillTree(
+                        nodes = nodes,
+                        selectedId = selectedId,
+                        onSelect = onSelect,
+                        scale = scale,
+                        offset = offset,
+                    )
+                }
+            }
+        }
+
+        // ── Dedicated toolbar: never covers nodes
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (nodes.isNotEmpty()) {
+                ClayButton(
+                    text = "Reset view",
+                    onClick = onResetView,
+                    accent = ClayPalette.Sky,
+                    style = ClayButtonStyle.Soft,
+                    height = 38.dp,
+                    leadingEmoji = "↺",
+                )
+                // Zoom controls alternative to pinch
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ClayIconButton(
+                        icon = Icons.Rounded.Add,
+                        onClick = { onScaleChange((scale * 1.18f).coerceIn(0.5f, 1.6f)) },
+                        contentDescription = "Zoom in",
+                        accent = ClayPalette.Sky,
+                        size = 38.dp,
+                    )
+                    // Zoom-out = smaller step so users don't overshoot
+                    ClayIconButton(
+                        icon = Icons.Rounded.Refresh,
+                        onClick = { onScaleChange((scale * 0.85f).coerceIn(0.5f, 1.6f)) },
+                        contentDescription = "Zoom out",
+                        accent = ClayPalette.Sky,
+                        size = 38.dp,
+                    )
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            ClayButton(
+                text = if (nodes.isEmpty()) "Add root skill" else "Add skill",
+                onClick = onAddRoot,
+                accent = ClayPalette.Mint,
+                height = 38.dp,
+                leadingEmoji = "＋",
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -327,7 +459,7 @@ private fun SkillNodeSheet(
             )
 
             Spacer(Modifier.height(18.dp))
-            ClayCard(shape = ClayShape.Medium, elevation = 10.dp, contentPadding = PaddingValues(16.dp)) {
+            ClayCard(shape = ClayShape.Medium, elevation = 8.dp, glowAlpha = 0.12f, contentPadding = PaddingValues(16.dp)) {
                 Text(
                     text = if (view.state == SkillNodeState.Locked) "Why is this locked?" else "Unlock requirement",
                     style = MaterialTheme.typography.titleSmall,
@@ -342,6 +474,51 @@ private fun SkillNodeSheet(
                 if (view.state == SkillNodeState.Locked) {
                     Spacer(Modifier.height(10.dp))
                     ClayProgressBar(progress = view.requirementProgress, accent = ClayPalette.Peach, height = 10.dp)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "${(view.requirementProgress * 100).toInt()}% towards unlock",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ClayInk.Muted,
+                    )
+                } else {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = when (view.state) {
+                            SkillNodeState.Available -> "Ready — any XP in ${view.attributeName ?: "its attribute"} now counts"
+                            SkillNodeState.InProgress -> "${(view.fraction * 100).toInt()}% mastered"
+                            SkillNodeState.Mastered -> "Mastered at ${view.masteryXp} XP"
+                            else -> ""
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ClayInk.Muted,
+                    )
+                }
+            }
+
+            // Current progress detail
+            Spacer(Modifier.height(14.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // XP pillar
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Current XP", style = MaterialTheme.typography.labelSmall, color = ClayInk.Muted)
+                    Text(text = "${view.xp}", style = MaterialTheme.typography.titleMedium, color = accent.deep)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "To master", style = MaterialTheme.typography.labelSmall, color = ClayInk.Muted)
+                    Text(text = "${view.masteryXp}", style = MaterialTheme.typography.titleMedium, color = ClayInk.Primary)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Linked skill", style = MaterialTheme.typography.labelSmall, color = ClayInk.Muted)
+                    Text(
+                        text = view.attributeName ?: "—",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = ClayInk.Primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
 
@@ -414,7 +591,7 @@ private fun StateBadge(state: SkillNodeState) {
         SkillNodeState.Mastered -> ClayPalette.Butter
         SkillNodeState.InProgress -> ClayPalette.Lavender
         SkillNodeState.Available -> ClayPalette.Mint
-        SkillNodeState.Locked -> ClayPalette.SurfaceCream.let { ClayPalette.Peach }
+        SkillNodeState.Locked -> ClayPalette.Peach
     }
     Box(
         modifier = Modifier
@@ -648,4 +825,3 @@ private fun NodeEditorSheet(
         }
     }
 }
-

@@ -208,20 +208,32 @@ class QuestEditorViewModel(
 
     fun setXpReward(value: Int) = update { it.copy(xpReward = value.coerceIn(10, 1_000)) }
 
-    /** Switching tracking style re-points unit + target + XP to sensible defaults. */
+    /**
+     * Switching tracking style re-points to sensible defaults, but preserves
+     * user-entered target/xp if they already differ from the previous defaults.
+     */
     fun setTrackingKind(kind: TrackingKind) = update { state ->
-        val (unit, target, xp) = when (kind) {
-            TrackingKind.Time -> Triple(UnitKind.Minutes, "30", 60)
-            TrackingKind.Count -> Triple(UnitKind.Pages, "25", 60)
-            TrackingKind.Milestone -> Triple(UnitKind.Sessions, "1", 200)
-            TrackingKind.Performance -> Triple(UnitKind.Points, "100", 120)
-            TrackingKind.Custom -> Triple(UnitKind.Custom, "10", 60)
+        if (state.trackingKind == kind) return@update state
+        val defaultsFor: (TrackingKind) -> Triple<UnitKind, String, Int> = { k ->
+            when (k) {
+                TrackingKind.Time -> Triple(UnitKind.Minutes, "30", 60)
+                TrackingKind.Count -> Triple(UnitKind.Pages, "25", 60)
+                TrackingKind.Milestone -> Triple(UnitKind.Sessions, "1", 200)
+                TrackingKind.Performance -> Triple(UnitKind.Points, "100", 120)
+                TrackingKind.Custom -> Triple(UnitKind.Custom, "10", 60)
+            }
         }
+        val (newUnit, newTarget, newXp) = defaultsFor(kind)
+        val (oldUnit, oldTarget, oldXp) = defaultsFor(state.trackingKind)
+        // Only overwrite a field if the user hasn't customised it away from the old default
+        val keepTarget = state.targetText != oldTarget
+        val keepXp = state.xpReward != oldXp
+        val keepUnit = state.unit != oldUnit
         state.copy(
             trackingKind = kind,
-            unit = unit,
-            targetText = target,
-            xpReward = xp,
+            unit = if (keepUnit) state.unit else newUnit,
+            targetText = if (keepTarget) state.targetText else newTarget,
+            xpReward = if (keepXp) state.xpReward else newXp,
             customUnit = if (kind == TrackingKind.Custom) state.customUnit.ifBlank { "steps" } else state.customUnit,
         )
     }
