@@ -459,15 +459,28 @@ fun QuestEditorScreen(
                         color = ClayInk.Secondary,
                         modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
                     )
-                    WrappingChips(
-                        items = state.attributes,
-                        selected = state.attributes.firstOrNull { it.attributeKind == state.attributeName || it.name == state.attributeName },
-                        onSelect = { attr -> viewModel.setAttribute(attr.attributeKind ?: attr.name) },
-                        label = { it.name },
-                        emoji = { it.emoji },
-                        accentFor = { ClayPalette.accentById(it.accentId) },
-                        key = { it.id },
-                    )
+                    val selectedAttribute = state.attributes.firstOrNull { it.attributeKind == state.attributeName || it.name == state.attributeName }
+                    if (selectedAttribute != null) {
+                        WrappingChips(
+                            items = state.attributes,
+                            selected = selectedAttribute,
+                            onSelect = { attr -> viewModel.setAttribute(attr.attributeKind ?: attr.name) },
+                            label = { it.name },
+                            emoji = { it.emoji },
+                            accentFor = { ClayPalette.accentById(it.accentId) },
+                            key = { it.id },
+                        )
+                    } else if (state.attributes.isNotEmpty()) {
+                        WrappingChips(
+                            items = state.attributes,
+                            selected = state.attributes.first(),
+                            onSelect = { attr -> viewModel.setAttribute(attr.attributeKind ?: attr.name) },
+                            label = { it.name },
+                            emoji = { it.emoji },
+                            accentFor = { ClayPalette.accentById(it.accentId) },
+                            key = { it.id },
+                        )
+                    }
 
                     // ── Optional notes ─────────────────────────────────────
                     Spacer(Modifier.height(16.dp))
@@ -765,6 +778,7 @@ private fun CategoryChips(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DayPicker(
     days: Set<Int>,
